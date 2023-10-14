@@ -1,0 +1,18 @@
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping
+                            http://doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+
+	<entity name="NoreSources\OFM\TestData\BasicEntity" table="Test_BasicEntity" schema="Tests">
+		<id name="id" type="integer">
+			<generator strategy="AUTO" />
+		</id>
+
+		<field name="name" type="string" />
+		<lifecycle-callbacks>
+			<lifecycle-callback type="prePersist" method="prePersistTask" />
+		</lifecycle-callbacks>
+		<entity-listeners>
+			<entity-listener class="\NoreSources\OFM\TestUtility\TestEntityListener" />
+		</entity-listeners>
+	</entity>
+</doctrine-mapping>

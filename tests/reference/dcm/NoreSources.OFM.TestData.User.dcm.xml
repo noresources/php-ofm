@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<entity name="NoreSources\OFM\TestData\User" table="users">
+		<id name="id" type="integer">
+			<generator strategy="AUTO" />
+		</id>
+
+		<field name="name" type="string" />
+				<field name="persistCount" type="integer" />
+				<field name="updateCount" type="integer" />
+
+		<one-to-many target-entity="Bug" field="reportedBugs" mapped-by="reporter" />
+		<one-to-many target-entity="Bug" field="assignedBugs" mapped-by="engineer" />
+
+		<lifecycle-callbacks>
+			<lifecycle-callback type="prePersist" method="prePersistTask" />
+			<lifecycle-callback type="preUpdate" method="preUpdateTask" />
+		</lifecycle-callbacks>
+
+
+	</entity>
+</doctrine-mapping>

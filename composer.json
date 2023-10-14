@@ -1,0 +1,47 @@
+{
+	"name": "noresources/ofm", 
+	"description": "Doctrine ORM Mapping driver utilities", 
+	"type": "library", 
+	"license": "MIT", 
+	"keywords": [
+		"ODM", 
+		"Persistence"
+	], 
+	"authors": [
+		{
+			"name": "Renaud Guillard", 
+			"email": "dev@nore.fr", 
+			"role": "lead"
+		}
+	], 
+	"autoload": {
+		"psr-4": {
+			"NoreSources\\OFM\\": "src/", 
+			"NoreSources\\OFM\\TestUtility\\": "tests/src/", 
+			"NoreSources\\OFM\\TestData\\": "tests/reference/src/"
+		}
+	}, 
+	"require": {
+		"noresources/persistence": "dev-main"
+	}, 
+	"scripts": {
+		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"
+	}, 
+	"autoload-dev": {
+		"psr-4": {
+			"NoreSources\\OFM\\TestCase\\": "tests/cases/", 
+			"NoreSources\\OFM\\TestData\\": "tests/reference/src/"
+		}
+	}, 
+	"require-dev": {
+		"phpunit/phpunit": ">= 7.0", 
+		"symfony/cache": "^3.4", 
+		"doctrine/orm": "^2.17"
+	}, 
+	"extra": {
+		"branch-alias": {
+			"dev-draft": "0.1.x-dev", 
+			"dev-main": "1.0.x-dev"
+		}
+	}
+}
