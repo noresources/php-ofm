@@ -1,11 +1,12 @@
 {
 	"name": "noresources/ofm", 
-	"description": "Doctrine ORM Mapping driver utilities", 
+	"description": "Structured text file based object mapping",
 	"type": "library", 
 	"license": "MIT", 
 	"keywords": [
-		"ODM", 
-		"Persistence"
+		"Doctrine", 
+		"Persistence",
+		"Filesystem"
 	], 
 	"authors": [
 		{
@@ -22,7 +23,7 @@
 		}
 	}, 
 	"require": {
-		"noresources/persistence": "dev-main"
+		"noresources/persistence": "^0.2"
 	}, 
 	"scripts": {
 		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"
@@ -41,7 +42,7 @@
 	"extra": {
 		"branch-alias": {
 			"dev-draft": "0.1.x-dev", 
-			"dev-main": "1.0.x-dev"
+			"dev-main": "0.2.x-dev"
 		}
 	}
 }
