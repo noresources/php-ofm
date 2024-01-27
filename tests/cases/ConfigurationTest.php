@@ -12,10 +12,24 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\Mapping\ClassMetadataFactory;
 use NoreSources\OFM\OFMSetup;
+use NoreSources\OFM\TestData\Bug;
 use NoreSources\Persistence\Mapping\Driver\ReflectionDriver;
+use NoreSources\Test\DerivedFileTestTrait;
 
 class ConfigurationTest extends \PHPUnit\Framework\TestCase
 {
+
+	use DerivedFileTestTrait;
+
+	public function setUp(): void
+	{
+		$this->setUpDerivedFileTestTrait(__DIR__ . '/..');
+	}
+
+	public function tearDown(): void
+	{
+		$this->tearDownDerivedFileTestTrait();
+	}
 
 	public function testDefaultDescriptor()
 	{
@@ -26,6 +40,30 @@ class ConfigurationTest extends \PHPUnit\Framework\TestCase
 
 		$actual = $configuration->getMetadataFactory();
 		$this->assertInstanceOf(ClassMetadataFactory::class, $actual);
+	}
+
+	public function testFile()
+	{
+		if (!\extension_loaded('json'))
+			return $this->assertFalse(\extension_loaded('json'),
+				'No JSON extension');
+
+		$derivedPath = $this->getDerivedFileDirectory();
+
+		$this->assertCreateFileDirectoryPath($derivedPath . '/a-file',
+			'Derived path');
+		$derivedPath = \realpath($derivedPath);
+		$filename = __DIR__ . '/../data/configuration.json';
+		$configuration = OFMSetup::createConfigurationFromDescriptorFile(
+			$filename);
+		$driver = $configuration->getMappingDriver();
+		$this->assertTrue($driver->isTransient(Bug::class),
+			'Bug class is transcient');
+		$this->assertFalse($driver->isTransient(self::class),
+			'Arbitrary class is not transcient');
+
+		$this->assertEquals($derivedPath, $configuration->getBasePath(),
+			'Absolute base path');
 	}
 
 	public function testDescriptor()

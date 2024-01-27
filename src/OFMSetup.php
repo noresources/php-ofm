@@ -10,7 +10,9 @@ namespace NoreSources\OFM;
 
 use Doctrine\ORM\Mapping\ClassMetadataFactory;
 use Doctrine\Persistence\Mapping\Driver\MappingDriver;
+use NoreSources\Path;
 use NoreSources\Container\Container;
+use NoreSources\Data\Serialization\SerializationManager;
 use NoreSources\MediaType\MediaTypeFactory;
 use NoreSources\OFM\Filesystem\DirectoryMapperInterface;
 use NoreSources\OFM\Filesystem\FileSerializationObjectManager;
@@ -70,13 +72,16 @@ class OFMSetup
 	}
 
 	/**
+	 * Create a configuration from a structured description.
 	 *
 	 * @param array $descriptor
 	 *        	Configuration descriptor
-	 * @return COnfiguration
+	 * @param $workingDirectory Reference
+	 *        	directory for relative paths
+	 * @return Configuration
 	 */
 	public static function createConfigurationFromDescriptor(
-		$descriptor)
+		$descriptor, $workingDirectory = null)
 	{
 		$defaults = [
 			'development' => false,
@@ -113,6 +118,20 @@ class OFMSetup
 			$paths = $v;
 		}
 
+		if (\is_string($workingDirectory))
+		{
+			$paths = \array_map(
+				function ($path) use ($workingDirectory) {
+					$p = $path;
+					if (!Path::isAbsolute($path))
+						$p = $workingDirectory . '/' . $path;
+					if (!\is_dir($p))
+						throw new \InvalidArgumentException(
+							'Invalid mapping driver path "' . $path . '"');
+					return \realpath($p);
+				}, $paths);
+		}
+
 		if (($v = Container::keyValue($driver, 'class',
 			Container::keyValue($defaults['mapping-driver'], 'class'))))
 		{
@@ -139,7 +158,17 @@ class OFMSetup
 		}
 
 		if (($v = Container::keyValue($filesystem, 'base-path')))
-			$configuration->setBasePath($v);
+		{
+			$p = $v;
+			if (\is_string($workingDirectory) && !Path::isAbsolute($v))
+				$p = $workingDirectory . '/' . $v;
+
+			if (!\is_dir($p))
+				throw new \InvalidArgumentException(
+					'Base directory "' . $v . '" does not exists');
+
+			$configuration->setBasePath(\realpath($p));
+		}
 		if (($v = Container::keyValue($filesystem, 'directormapper')))
 		{
 			if (\is_string($v) && \class_exists($v) &&
@@ -166,6 +195,31 @@ class OFMSetup
 			$configuration->setFileExtension($v);
 
 		return $configuration;
+	}
+
+	/**
+	 * Create configuration from structured description file.
+	 *
+	 * @param string $filename
+	 *        	Descriptor file name
+	 * @param string|NULL $workingDirectory
+	 *        	Base directory for relative paths. If NULL, use $filename directory as working
+	 *        	directory.
+	 * @throws \InvalidArgumentException
+	 * @return \NoreSources\OFM\Configuration
+	 */
+	public static function createConfigurationFromDescriptorFile(
+		$filename, $workingDirectory = null)
+	{
+		if (!\file_exists($filename))
+			throw new \InvalidArgumentException(
+				'Configuration descriptor file not found');
+		if ($workingDirectory === null)
+			$workingDirectory = \dirname(\realpath($filename));
+		$serializer = new SerializationManager();
+		$descriptor = $serializer->unserializeFromFile($filename);
+		return self::createConfigurationFromDescriptor($descriptor,
+			$workingDirectory);
 	}
 
 	/**

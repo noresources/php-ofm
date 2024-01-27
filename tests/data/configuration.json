@@ -1,0 +1,11 @@
+{
+	"mapping-driver": {
+		"paths": [
+			"../reference/src"
+		]
+	}, 
+	"filesystem": {
+		"base-path": "../derived", 
+		"media-type": "application/json"
+	}
+}
