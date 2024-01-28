@@ -22,9 +22,11 @@ use NoreSources\OFM\TestData\Product;
 use NoreSources\OFM\TestData\User;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
 use NoreSources\Persistence\ObjectManagerProviderInterface;
+use NoreSources\Persistence\ObjectManagerRegistry;
 use NoreSources\Persistence\PropertyMappingInterface;
 use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
+use NoreSources\Persistence\Mapping\ObjectManagerRegistryClassMetadataFactory;
 use NoreSources\Persistence\Mapping\Driver\MappingDriverProviderInterface;
 use NoreSources\Persistence\TestUtility\TestEntityManagerFactoryTrait;
 use NoreSources\Persistence\TestUtility\TestMappingDriverClassMetadataFactory;
@@ -100,6 +102,58 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$filename = $fsManager->getObjectFile($product);
 		$this->assertFileExists($filename, 'Product persistent file');
 		$this->appendDerivedFilename($filename, false);
+	}
+
+	public function testObjectManagerRegistry()
+	{
+		if (!\class_exists(ObjectManagerRegistry::class))
+			return $this->assertFalse(false,
+				'Early version of noresources/persistence');
+
+		$method = __METHOD__;
+		$suffix = null;
+		$serializationManager = new SerializationManager();
+		$mediaType = MediaTypeFactory::getInstance()->createFromString(
+			'application/json');
+		$basePath = $this->getDerivedFileDirectory();
+
+		$configuration = OFMSetup::createReflectionDriverConfiguration(
+			[
+				$this->getReferenceFileDirectory() . '/src'
+			]);
+		$configuration->setSerializationManager($serializationManager);
+		$configuration->setFileMediaType($mediaType);
+		$configuration->setBasePath($basePath);
+		$firstManager = OFMSetup::createObjectManager($configuration);
+
+		$mappingDriver = new XmlDriver(
+			[
+				$this->getReferenceFileDirectory() . '/dcm'
+			]);
+		$factory = new TestMappingDriverClassMetadataFactory();
+		$factory->setMappingDriver($mappingDriver);
+		$factory->setMetadataClass(
+			\Doctrine\ORM\Mapping\ClassMetadata::class);
+		$configuration = OFMSetup::createConfiguration();
+		$configuration->setMappingDriver($mappingDriver);
+		$configuration->setMetadataFactory($factory);
+		$configuration->setBasePath($basePath);
+		$configuration->setFileMediaType($mediaType);
+		$configuration->setSerializationManager($serializationManager);
+
+		$secondManager = OFMSetup::createObjectManager($configuration);
+
+		$registry = new ObjectManagerRegistry();
+		$registry->setObjectManager('first', $firstManager);
+		$registry->setObjectManager('second', $secondManager);
+
+		$registryMetadataFactory = $registry->getMetadataFactory();
+		$this->assertInstanceOf(
+			ObjectManagerRegistryClassMetadataFactory::class,
+			$registryMetadataFactory);
+
+		$none = $registry->find(User::class, 'who');
+		$this->assertNull($none, 'Find a user that does not exists');
 	}
 
 	public function testUserPersistenceUsingManagerWithXmlDriverAndOrmClassMetadata()

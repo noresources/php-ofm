@@ -1,11 +1,11 @@
 {
 	"name": "noresources/ofm", 
-	"description": "Structured text file based object mapping",
+	"description": "Structured text file based object mapping", 
 	"type": "library", 
 	"license": "MIT", 
 	"keywords": [
 		"Doctrine", 
-		"Persistence",
+		"Persistence", 
 		"Filesystem"
 	], 
 	"authors": [
@@ -23,7 +23,7 @@
 		}
 	}, 
 	"require": {
-		"noresources/persistence": "^0.2"
+		"noresources/persistence": "^0.4"
 	}, 
 	"scripts": {
 		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"
