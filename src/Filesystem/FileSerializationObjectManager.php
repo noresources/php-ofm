@@ -50,9 +50,10 @@ class FileSerializationObjectManager implements ObjectManager,
 		$this->setBasePath($configuration->getBasePath());
 		$this->setDirectoryMapper($configuration->getDirectoryMapper());
 
-		$this->setSerializationManager(
-			$configuration->getSerializationManager());
-		$this->setFileMediaType($configuration->getFileMediaType());
+		if (($serializer = $configuration->getSerializationManager()))
+			$this->setSerializationManager($serializer);
+		if (($mediaType = $configuration->getFileMediaType()))
+			$this->setFileMediaType($mediaType);
 
 		$this->setFilenameMapper($configuration->getFilenameMapper());
 		$this->setFileExtension($configuration->getFileExtension());
@@ -192,8 +193,8 @@ class FileSerializationObjectManager implements ObjectManager,
 				'General base path is mandatory to use non-absolute path from ' .
 				TypeDescription::getName($dm));
 
-		return $this->basePath . '/' .
-			$dm->getClassDirectory($className);
+		return $this->basePath . '/' . $dm->getClassDirectory(
+			$className);
 	}
 
 	/**
