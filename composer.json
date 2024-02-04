@@ -23,7 +23,7 @@
 		}
 	}, 
 	"require": {
-		"noresources/persistence": "^0.4"
+		"noresources/persistence": "^0.5.0"
 	}, 
 	"scripts": {
 		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"
@@ -41,8 +41,7 @@
 	}, 
 	"extra": {
 		"branch-alias": {
-			"dev-draft": "0.1.x-dev", 
-			"dev-main": "0.2.x-dev"
+			"dev-main": "0.3.x-dev"
 		}
 	}
 }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<mapped-superclass name="NoreSources\OFM\TestData\Person">
+			<field name="firstName" type="string" nullable="false" >
+			<options>
+					<option name="comment">First name</option>
+				</options>
+			</field>
+			<field name="lastName" type="string" nullable="false">
+			<options>
+					<option name="comment">Last name</option>
+				</options>
+			</field>
+			<field name="sex" type="integer" nullable="false" >
+				<options>
+					<option name="comment">Birth sex</option>
+				</options>
+			</field>
+	</mapped-superclass>
+</doctrine-mapping>

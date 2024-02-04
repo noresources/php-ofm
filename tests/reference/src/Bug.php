@@ -14,7 +14,7 @@ class Bug
 
 	/**
 	 *
-	 * @persistent-id generator=auto
+	 * @persistent-id generator=AUTO
 	 *
 	 * @var string
 	 */

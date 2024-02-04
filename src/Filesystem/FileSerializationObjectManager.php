@@ -111,7 +111,7 @@ class FileSerializationObjectManager implements ObjectManager,
 		if ($this->hasRepository($className))
 			return $this->defaultGetRepository($className);
 		$factory = $this->getMetadataFactory();
-		if (!$factory->hasMetadataFor($className))
+		if ($factory->isTransient($className))
 			throw new \InvalidArgumentException(
 				$className . ' is not supported by this ObjectManager');
 		if (!isset($this->serializationManager))
@@ -193,8 +193,8 @@ class FileSerializationObjectManager implements ObjectManager,
 				'General base path is mandatory to use non-absolute path from ' .
 				TypeDescription::getName($dm));
 
-		return $this->basePath . '/' . $dm->getClassDirectory(
-			$className);
+		return $this->basePath . '/' .
+			$dm->getClassDirectory($className);
 	}
 
 	/**

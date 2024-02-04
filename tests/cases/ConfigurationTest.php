@@ -12,7 +12,6 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\Mapping\ClassMetadataFactory;
 use NoreSources\OFM\OFMSetup;
-use NoreSources\OFM\TestData\Bug;
 use NoreSources\Persistence\Mapping\Driver\ReflectionDriver;
 use NoreSources\Test\DerivedFileTestTrait;
 
@@ -57,10 +56,6 @@ class ConfigurationTest extends \PHPUnit\Framework\TestCase
 		$configuration = OFMSetup::createConfigurationFromDescriptorFile(
 			$filename);
 		$driver = $configuration->getMappingDriver();
-		$this->assertTrue($driver->isTransient(Bug::class),
-			'Bug class is transcient');
-		$this->assertFalse($driver->isTransient(self::class),
-			'Arbitrary class is not transcient');
 
 		$this->assertEquals($derivedPath, $configuration->getBasePath(),
 			'Absolute base path');

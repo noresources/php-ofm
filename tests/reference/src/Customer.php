@@ -1,0 +1,42 @@
+<?php
+
+/**
+ * Copyright © 2024 by Renaud Guillard (dev@nore.fr)
+ * Distributed under the terms of the MIT License, see LICENSE
+ *
+ * @package OFM
+ */
+namespace NoreSources\OFM\TestData;
+
+/**
+ *
+ * @persistent-entity
+ *
+ */
+class Customer extends Person
+{
+
+	public function getId()
+	{
+		return $this->id;
+	}
+
+	public function __construct($id)
+	{
+		$this->id = $id;
+	}
+
+	/**
+	 *
+	 * @persistent-field
+	 * @var \DateTimeInterface
+	 */
+	public $birthDate;
+
+	/**
+	 *
+	 * @persistent-id
+	 * @var integer
+	 */
+	private $id;
+}

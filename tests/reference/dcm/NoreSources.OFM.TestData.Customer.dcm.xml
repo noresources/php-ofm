@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<entity name="NoreSources\OFM\TestData\Customer" table="customers">
+		<id name="id" type="integer" />
+		<field name="birthDate" type="datetime" />
+	</entity>
+</doctrine-mapping>

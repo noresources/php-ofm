@@ -10,7 +10,7 @@ class Product
 
 	/**
 	 *
-	 * @persistent-id generator=auto
+	 * @persistent-id generator=AUTO
 	 * @var integer
 	 */
 	protected $id;

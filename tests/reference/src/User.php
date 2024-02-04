@@ -15,7 +15,7 @@ class User
 	/**
 	 * User ID
 	 *
-	 * @persistent-id generator=auto
+	 * @persistent-id generator=AUTO
 	 * @var string
 	 */
 	protected $id;

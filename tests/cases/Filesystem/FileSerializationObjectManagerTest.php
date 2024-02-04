@@ -17,7 +17,9 @@ use NoreSources\Data\Serialization\SerializationManager;
 use NoreSources\MediaType\MediaTypeFactory;
 use NoreSources\OFM\OFMSetup;
 use NoreSources\OFM\TestData\Bug;
+use NoreSources\OFM\TestData\Customer;
 use NoreSources\OFM\TestData\EntityWithEmbeddedObject;
+use NoreSources\OFM\TestData\Person;
 use NoreSources\OFM\TestData\Product;
 use NoreSources\OFM\TestData\User;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
@@ -28,15 +30,18 @@ use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Mapping\ObjectManagerRegistryClassMetadataFactory;
 use NoreSources\Persistence\Mapping\Driver\MappingDriverProviderInterface;
+use NoreSources\Persistence\TestUtility\ResultComparisonTrait;
+use NoreSources\Persistence\TestUtility\TestClassMetadataFactory;
 use NoreSources\Persistence\TestUtility\TestEntityManagerFactoryTrait;
-use NoreSources\Persistence\TestUtility\TestMappingDriverClassMetadataFactory;
 use NoreSources\Test\DerivedFileTestTrait;
+use NoreSources\Type\TypeDescription;
 
 class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 {
 
 	use DerivedFileTestTrait;
 	use TestEntityManagerFactoryTrait;
+	use ResultComparisonTrait;
 
 	public $testId;
 
@@ -121,6 +126,14 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			[
 				$this->getReferenceFileDirectory() . '/src'
 			]);
+
+		$mappingDriver = $configuration->getMappingDriver();
+		$factory = $configuration->getMetadataFactory();
+		$this->assertTrue(!$factory->isTransient(User::class),
+			TypeDescription::getLocalName($factory) . ' using ' .
+			TypeDescription::getLocalName($mappingDriver) .
+			' has metadata for User');
+
 		$configuration->setSerializationManager($serializationManager);
 		$configuration->setFileMediaType($mediaType);
 		$configuration->setBasePath($basePath);
@@ -130,10 +143,16 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			[
 				$this->getReferenceFileDirectory() . '/dcm'
 			]);
-		$factory = new TestMappingDriverClassMetadataFactory();
+		$factory = new TestClassMetadataFactory();
 		$factory->setMappingDriver($mappingDriver);
 		$factory->setMetadataClass(
 			\Doctrine\ORM\Mapping\ClassMetadata::class);
+
+		$this->assertTrue(!$factory->isTransient(User::class),
+			TypeDescription::getLocalName($factory) . ' using ' .
+			TypeDescription::getLocalName($mappingDriver) .
+			' has metadata for User');
+
 		$configuration = OFMSetup::createConfiguration();
 		$configuration->setMappingDriver($mappingDriver);
 		$configuration->setMetadataFactory($factory);
@@ -169,7 +188,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			[
 				$this->getReferenceFileDirectory() . '/dcm'
 			]);
-		$factory = new TestMappingDriverClassMetadataFactory();
+		$factory = new TestClassMetadataFactory();
 		$factory->setMappingDriver($mappingDriver);
 		$factory->setMetadataClass(
 			\Doctrine\ORM\Mapping\ClassMetadata::class);
@@ -212,7 +231,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			$mapper);
 		$this->assertEquals($fsManager, $mapper->getObjectManager());
 		// EntityManager
-		$isDevMode = true;
+		$isDevMode = false;
 		$configuration = ORMSetup::createConfiguration($isDevMode);
 		$configuration->setMetadataDriverImpl($mappingDriver);
 		$databasePath = $this->getDerivedFilename($method, $suffix,
@@ -224,7 +243,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 				$className
 			]);
 
-		$this->appendDerivedFilename($databasePath, false);
+		$this->appendDerivedFilename($databasePath, $isDevMode);
 
 		$a = new User('alice');
 		$this->assertEquals(0, $a->persistCount,
@@ -322,21 +341,130 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$manager->flush();
 	}
 
+	public function testInheritance()
+	{
+		$method = __METHOD__;
+		$suffix = '';
+		$isDevMode = false;
+		$classNames = [
+			Person::class,
+			Customer::class
+		];
+
+		$dcmPaaths = [
+			$this->getReferenceFileDirectory() . '/dcm'
+		];
+		$configuration = ORMSetup::createXMLMetadataConfiguration(
+			$dcmPaaths, $isDevMode);
+		$databasePath = $this->getDerivedFilename($method, $suffix,
+			'sqlite');
+		$this->assertCreateFileDirectoryPath($databasePath,
+			'Database path');
+		$em = $this->createEntityManager($configuration, $databasePath,
+			$classNames);
+		$this->appendDerivedFilename($databasePath, $isDevMode);
+
+		$classPaths = [
+			$this->getReferenceFileDirectory() . '/src'
+		];
+		$serializer = new SerializationManager();
+		$mediaType = MediaTypeFactory::getInstance()->createFromString(
+			'application/json');
+		$ofmConfiguration = OFMSetup::createReflectionDriverConfiguration(
+			$classPaths);
+		$ofmConfiguration->setBasePath($this->getDerivedFileDirectory());
+		$ofmConfiguration->setSerializationManager($serializer);
+		$ofmConfiguration->setFileMediaType($mediaType);
+		$fm = OFMSetup::createObjectManager($ofmConfiguration);
+
+		$emFactory = $em->getMetadataFactory();
+		$fmFactory = $fm->getMetadataFactory();
+
+		$this->compareImplementation(
+			[
+				'isTransient' => [
+					Person::class
+				],
+				'isTransient' => [
+					Customer::class
+				],
+				'isTransient' => [
+					self::class
+				]
+			], $emFactory, $fmFactory, 'Metadata factory');
+
+		$className = Customer::class;
+
+		$emCustommerMetadata = $em->getClassMetadata($className);
+		$fmCustommerMetadata = $fm->getClassMetadata($className);
+
+		$this->compareImplementation(
+			[
+				'getFieldNames',
+				'GetAssociationNames',
+				'isIdentifier' => [
+					'id'
+				],
+				'hasField' => [
+					'firstName'
+				],
+				'getTypeOfField' => [
+					'sex'
+				]
+			], $emCustommerMetadata, $fmCustommerMetadata,
+			'Customer class');
+
+		foreach ([
+			$em,
+			$fm
+		] as $manager)
+		{
+			$this->runCustomerTest($manager);
+		}
+	}
+
+	public function runCustomerTest(ObjectManager $manager)
+	{
+		$ns = TypeDescription::getNamespaces($manager);
+		$label = $ns[0] . ' ' . TypeDescription::getLocalName($manager) .
+			': ';
+		$one = new Customer(1);
+		$one->firstName = 'The';
+		$one->lastName = 'One';
+		$one->setPrivateData('M');
+		$one->birthDate = new \DateTime('2024-02-11T14:47:05+0100');
+
+		$className = Customer::class;
+		if (($existing = $manager->find($className, 1)))
+		{
+			$manager->remove($existing);
+			$manager->flush();
+		}
+
+		$this->assertNull($manager->find($className, 1),
+			$label . '"One" Initially not existing');
+		$manager->persist($one);
+		$manager->flush();
+		$this->assertNotNull($manager->find($className, 1),
+			$label . '"One" Now exist');
+	}
+
 	public function testAssociations()
 	{
 		$method = __METHOD__;
 		$suffix = '';
-		$isDevMode = true;
+		$isDevMode = false;
 		$classNames = [
 			User::class,
 			Bug::class,
 			Bug::class,
-			Product::class
+			Product::class,
+			Customer::class
 		];
+
 		$dcmPaaths = [
 			$this->getReferenceFileDirectory() . '/dcm'
 		];
-
 		$configuration = ORMSetup::createXMLMetadataConfiguration(
 			$dcmPaaths, $isDevMode);
 		$databasePath = $this->getDerivedFilename($method, $suffix,
