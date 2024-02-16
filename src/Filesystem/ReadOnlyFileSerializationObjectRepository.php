@@ -59,6 +59,13 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 					$serializer->getMediaTypes());
 		}
 
+		if (!$extension && $mediaType)
+		{
+			$list = MediaTypeFileExtensionRegistry::getInstance()->getMediaTypeExtensions(
+				$mediaType);
+			$extension = Container::firstValue($list);
+		}
+
 		if (!$extension)
 		{
 			$extensions = [];
