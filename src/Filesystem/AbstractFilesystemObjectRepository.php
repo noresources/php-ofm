@@ -19,9 +19,12 @@ use NoreSources\Container\Container;
 use NoreSources\MediaType\MediaTypeFileExtensionRegistry;
 use NoreSources\OFM\Filesystem\Traits\FilenameStrategyTrait;
 use NoreSources\Persistence\ClosureExpressionVisitorObjectSorter;
+use NoreSources\Persistence\DefaultObjectRuntimeIdGenerator;
+use NoreSources\Persistence\ObjectContainerInterface;
 use NoreSources\Persistence\ObjectIdentifier;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
 use NoreSources\Persistence\ObjectManagerProviderInterface;
+use NoreSources\Persistence\ObjectRuntimeIdGeneratorInterface;
 use NoreSources\Persistence\ObjectSorterInterface;
 use NoreSources\Persistence\Traits\ObjectManagerReferenceTrait;
 
@@ -30,7 +33,7 @@ use NoreSources\Persistence\Traits\ObjectManagerReferenceTrait;
  */
 abstract class AbstractFilesystemObjectRepository implements
 	ObjectRepository, Selectable, ObjectManagerProviderInterface,
-	ObjectManagerAwareInterface
+	ObjectManagerAwareInterface, ObjectContainerInterface
 {
 	use FilenameStrategyTrait;
 	use ObjectManagerReferenceTrait;
@@ -57,6 +60,7 @@ abstract class AbstractFilesystemObjectRepository implements
 		$this->classMetadata = $classMetadata;
 		$this->setFilesystemStrategy($basePath, $filenameMapper,
 			$extension);
+		$this->objectRuntimeIndentifierGenerator = new DefaultObjectRuntimeIdGenerator();
 	}
 
 	/**
@@ -227,6 +231,37 @@ abstract class AbstractFilesystemObjectRepository implements
 			$filtered = array_slice($filtered, (int) $offset, $limit);
 		}
 		return $filtered;
+	}
+
+	public function contains(object $object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		return isset($this->identityMappings[$oid]);
+	}
+
+	public function attach(object $object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (isset($this->identityMappings[$oid]))
+			return;
+		$metadata = $this->getClassMetadata();
+		$id = $metadata->getIdentifierValues($object);
+		$hash = $this->getFilenameMapper()->getBasename($id);
+		$this->identityMappings[$oid] = $hash;
+		$this->objectCache[$hash] = $object;
+	}
+
+	public function detach($object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (!isset($this->identityMappings[$oid]))
+			return;
+		$hash = $this->identityMappings[$oid];
+		unset($this->identityMappings[$oid]);
+		unset($this->objectCache[$hash]);
 	}
 
 	/**
@@ -404,10 +439,13 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	public function cacheObject($object)
 	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
 		$metadata = $this->getClassMetadata();
 		$id = ObjectIdentifier::normalize($object, $metadata);
 		$hash = $this->getFilenameMapper()->getBasename($id);
 		$this->objectCache[$hash] = $object;
+		$this->identityMappings[$oid] = $hash;
 	}
 
 	public function uncacheObject($objectOrId)
@@ -487,4 +525,17 @@ abstract class AbstractFilesystemObjectRepository implements
 	 * @var array<string, object>
 	 */
 	private $objectCache = [];
+
+	/**
+	 * Object runtime identifier -> File identifier map
+	 *
+	 * @var array <mixed, string>
+	 */
+	private $identityMappings = [];
+
+	/**
+	 *
+	 * @var ObjectRuntimeIdGeneratorInterface
+	 */
+	private $objectRuntimeIndentifierGenerator;
 }

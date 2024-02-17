@@ -13,6 +13,8 @@ use Doctrine\ORM\ORMSetup;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\ObjectManager;
 use Doctrine\Persistence\ObjectRepository;
+use Doctrine\Persistence\Mapping\ClassMetadata;
+use NoreSources\Container\Container;
 use NoreSources\Data\Serialization\SerializationManager;
 use NoreSources\MediaType\MediaTypeFactory;
 use NoreSources\OFM\OFMSetup;
@@ -28,10 +30,10 @@ use NoreSources\Persistence\ObjectManagerRegistry;
 use NoreSources\Persistence\PropertyMappingInterface;
 use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
+use NoreSources\Persistence\Mapping\GenericClassMetadataFactory;
 use NoreSources\Persistence\Mapping\ObjectManagerRegistryClassMetadataFactory;
 use NoreSources\Persistence\Mapping\Driver\MappingDriverProviderInterface;
 use NoreSources\Persistence\TestUtility\ResultComparisonTrait;
-use NoreSources\Persistence\TestUtility\TestClassMetadataFactory;
 use NoreSources\Persistence\TestUtility\TestEntityManagerFactoryTrait;
 use NoreSources\Test\DerivedFileTestTrait;
 use NoreSources\Type\TypeDescription;
@@ -87,24 +89,51 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->assertEquals(Product::class, $productMetadata->getName(),
 			'ClassMetadata::getName() returns qualified class name');
 		foreach ([
-			Product::class => ClassMetadataAdapter::getFullyQualifiedClassName(
-				Product::class, $productMetadata),
-			Product::class => ClassMetadataAdapter::getFullyQualifiedClassName(
-				'Product', $productMetadata),
-			User::class => ClassMetadataAdapter::getFullyQualifiedClassName(
-				'User', $productMetadata)
-		] as $expected => $actual)
+			[
+				Product::class,
+				ClassMetadataAdapter::getFullyQualifiedClassName(
+					Product::class, $productMetadata)
+			],
+			[
+				Product::class,
+				ClassMetadataAdapter::getFullyQualifiedClassName(
+					'Product', $productMetadata)
+			],
+			[
+				User::class,
+				ClassMetadataAdapter::getFullyQualifiedClassName('User',
+					$productMetadata)
+			]
+		] as $test)
 		{
+			$expected = $test[0];
+			$actual = $test[1];
 			$this->assertEquals($expected, $actual);
 		}
 
-		$product = new Product();
-		$product->setName('AProductThatMakeEverything');
+		$productA = new Product();
+		$productA->setName('AProductThatMakeEverything');
 
-		$fsManager->persist($product);
+		$this->assertNull($productA->getId(), 'ID is initially NULL');
+
+		$productB = new Product();
+		$foredId = '_SoMeThiNgThat-wiLl-NoT-bE-aGeneraTed-ID_!_';
+		$productB->forceIdValue($foredId);
+
+		$this->assertEquals($foredId, $productB->getId(),
+			'ProductB ID before persist');
+
+		$fsManager->persist($productA);
+		$this->assertNotNull($productA->getId(),
+			'ProductA ID set after persist');
+
+		$fsManager->persist($productB);
+		$this->assertNotEquals($foredId, $productB->getId(),
+			'Product B ID re-assigned after persist new.');
+
 		$fsManager->flush();
 
-		$filename = $fsManager->getObjectFile($product);
+		$filename = $fsManager->getObjectFile($productA);
 		$this->assertFileExists($filename, 'Product persistent file');
 		$this->appendDerivedFilename($filename, false);
 	}
@@ -143,7 +172,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			[
 				$this->getReferenceFileDirectory() . '/dcm'
 			]);
-		$factory = new TestClassMetadataFactory();
+		$factory = new GenericClassMetadataFactory();
 		$factory->setMappingDriver($mappingDriver);
 		$factory->setMetadataClass(
 			\Doctrine\ORM\Mapping\ClassMetadata::class);
@@ -188,7 +217,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			[
 				$this->getReferenceFileDirectory() . '/dcm'
 			]);
-		$factory = new TestClassMetadataFactory();
+		$factory = new GenericClassMetadataFactory();
 		$factory->setMappingDriver($mappingDriver);
 		$factory->setMetadataClass(
 			\Doctrine\ORM\Mapping\ClassMetadata::class);
@@ -232,18 +261,9 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->assertEquals($fsManager, $mapper->getObjectManager());
 		// EntityManager
 		$isDevMode = false;
-		$configuration = ORMSetup::createConfiguration($isDevMode);
-		$configuration->setMetadataDriverImpl($mappingDriver);
-		$databasePath = $this->getDerivedFilename($method, $suffix,
-			'sqlite');
-		$this->assertCreateFileDirectoryPath($databasePath,
-			'Database path');
-		$em = $this->createEntityManager($configuration, $databasePath,
-			[
-				$className
-			]);
-
-		$this->appendDerivedFilename($databasePath, $isDevMode);
+		$em = $this->createEntityManagerForTest($method, [
+			$className
+		]);
 
 		$a = new User('alice');
 		$this->assertEquals(0, $a->persistCount,
@@ -324,17 +344,17 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			EntityWithEmbeddedObject::class);
 		$this->assertEquals(Product::class,
 			$metadata->getTypeOfField('product'),
-			'$product type in metadata');
+			'$productA type in metadata');
 
-		$product = new Product();
+		$productA = new Product();
 		$productName = 'A wonderful product';
-		$product->setName($productName);
+		$productA->setName($productName);
 
 		$e = new EntityWithEmbeddedObject();
 		$e->id = 1;
-		$e->product = $product;
+		$e->product = $productA;
 
-		$this->assertEquals($productName, $product->getName(),
+		$this->assertEquals($productName, $productA->getName(),
 			'Product name');
 
 		$manager->persist($e);
@@ -351,34 +371,13 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			Customer::class
 		];
 
-		$dcmPaaths = [
-			$this->getReferenceFileDirectory() . '/dcm'
-		];
-		$configuration = ORMSetup::createXMLMetadataConfiguration(
-			$dcmPaaths, $isDevMode);
-		$databasePath = $this->getDerivedFilename($method, $suffix,
-			'sqlite');
-		$this->assertCreateFileDirectoryPath($databasePath,
-			'Database path');
-		$em = $this->createEntityManager($configuration, $databasePath,
-			$classNames);
-		$this->appendDerivedFilename($databasePath, $isDevMode);
+		$em = $this->createEntityManagerForTest($method, $classNames,
+			$isDevMode);
 
-		$classPaths = [
-			$this->getReferenceFileDirectory() . '/src'
-		];
-		$serializer = new SerializationManager();
-		$mediaType = MediaTypeFactory::getInstance()->createFromString(
-			'application/json');
-		$ofmConfiguration = OFMSetup::createReflectionDriverConfiguration(
-			$classPaths);
-		$ofmConfiguration->setBasePath($this->getDerivedFileDirectory());
-		$ofmConfiguration->setSerializationManager($serializer);
-		$ofmConfiguration->setFileMediaType($mediaType);
-		$fm = OFMSetup::createObjectManager($ofmConfiguration);
+		$ofm = $this->createFileObjectManagerForTest($method);
 
 		$emFactory = $em->getMetadataFactory();
-		$fmFactory = $fm->getMetadataFactory();
+		$ofmFactory = $ofm->getMetadataFactory();
 
 		$this->compareImplementation(
 			[
@@ -391,12 +390,12 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 				'isTransient' => [
 					self::class
 				]
-			], $emFactory, $fmFactory, 'Metadata factory');
+			], $emFactory, $ofmFactory, 'Metadata factory');
 
 		$className = Customer::class;
 
 		$emCustommerMetadata = $em->getClassMetadata($className);
-		$fmCustommerMetadata = $fm->getClassMetadata($className);
+		$ofmCustommerMetadata = $ofm->getClassMetadata($className);
 
 		$this->compareImplementation(
 			[
@@ -411,12 +410,12 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 				'getTypeOfField' => [
 					'sex'
 				]
-			], $emCustommerMetadata, $fmCustommerMetadata,
+			], $emCustommerMetadata, $ofmCustommerMetadata,
 			'Customer class');
 
 		foreach ([
 			$em,
-			$fm
+			$ofm
 		] as $manager)
 		{
 			$this->runCustomerTest($manager);
@@ -462,35 +461,12 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			Customer::class
 		];
 
-		$dcmPaaths = [
-			$this->getReferenceFileDirectory() . '/dcm'
-		];
-		$configuration = ORMSetup::createXMLMetadataConfiguration(
-			$dcmPaaths, $isDevMode);
-		$databasePath = $this->getDerivedFilename($method, $suffix,
-			'sqlite');
-		$this->assertCreateFileDirectoryPath($databasePath,
-			'Database path');
-		$em = $this->createEntityManager($configuration, $databasePath,
-			$classNames);
-		$this->appendDerivedFilename($databasePath, $isDevMode);
-
-		$classPaths = [
-			$this->getReferenceFileDirectory() . '/src'
-		];
-		$serializer = new SerializationManager();
-		$mediaType = MediaTypeFactory::getInstance()->createFromString(
-			'application/json');
-		$ofmConfiguration = OFMSetup::createReflectionDriverConfiguration(
-			$classPaths);
-		$ofmConfiguration->setBasePath($this->getDerivedFileDirectory());
-		$ofmConfiguration->setSerializationManager($serializer);
-		$ofmConfiguration->setFileMediaType($mediaType);
-		$fm = OFMSetup::createObjectManager($ofmConfiguration);
+		$em = $this->createEntityManagerForTest($method, $classNames);
+		$ofm = $this->createFileObjectManagerForTest($method);
 
 		foreach ([
 			$em,
-			$fm
+			$ofm
 		] as $manager)
 		{
 			$this->runTestAssociations($manager);
@@ -499,9 +475,10 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 
 	public function runTestAssociations(ObjectManager $objectManager)
 	{
+		$prefix = TypeDescription::getLocalName($objectManager) . ' | ';
 		$engineer = new User('engineer');
 		$this->assertEquals('engineer', $engineer->getId(),
-			'User constructor');
+			$prefix . 'User constructor');
 		$reporter = new User('reporter');
 
 		$product = new Product();
@@ -529,9 +506,22 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		 */
 		$product = $objectManager->find(Product::class, $productId);
 		$this->assertInstanceOf(Product::class, $product);
-		$this->assertEquals($productId, $product->getId(), 'Product ID');
+		$this->assertEquals($productId, $product->getId(),
+			$prefix . 'Product ID');
 
+		/**
+		 *
+		 * @var ClassMetadata $bugMetadata
+		 */
 		$bugMetadata = $objectManager->getClassMetadata(Bug::class);
+
+		$this->assertTrue($bugMetadata->hasAssociation('reporter'),
+			$prefix . 'Bog ass reporter association');
+		$reporterTargetClass = $bugMetadata->getAssociationTargetClass(
+			'reporter');
+
+		$this->assertEquals(User::class, $reporterTargetClass,
+			$prefix . '$reporter target class');
 
 		/**
 		 *
@@ -542,11 +532,281 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 
 		$bugProducts = $bug->getProducts();
 		$this->assertCount(1, $bugProducts,
-			'Number of products concerned by the bug');
+			$prefix . 'Number of products concerned by the bug');
 		$firstBugProduct = $bugProducts[0];
 		$this->assertInstanceOf(Product::class, $firstBugProduct,
-			'Bug products are Product');
+			$prefix . 'Bug products are Product');
 		$this->assertEquals($productId, $firstBugProduct->getId(),
-			'Bug product ID');
+			$prefix . 'Bug product ID');
+	}
+
+	/**
+	 * Check if our ObjectManager reacts the same way as Doctrine ORM EntityManager
+	 */
+	public function testObjectManagerBehavior()
+	{
+		$method = __METHOD__;
+		$isDevMode = true;
+		$ofm = $this->createFileObjectManagerForTest($method);
+		$em = $this->createEntityManagerForTest($method,
+			[
+				Product::class,
+				Bug::class,
+				User::class
+			], $isDevMode);
+
+		$objectManagers = [
+			TypeDescription::getLocalName($em) => $em,
+			TypeDescription::getLocalName($ofm) => $ofm
+		];
+
+		$className = Product::class;
+
+		$product = new Product();
+		$product->setName('P1');
+
+		$this->runContainsComparison($em, $ofm, $product,
+			'Initial state');
+		$this->assertNull($product->getId(),
+			'Product ID is initially null');
+
+		$ofm->persist($product);
+		$productIdFromOFM = $product->getId();
+		$this->assertNotNull($productIdFromOFM,
+			'FM metadata factory has an immediate ID generator');
+		$em->persist($product);
+		$this->assertEquals($productIdFromOFM, $product->getId(),
+			'EM did not modify P1 ID since EM ID generator is a post flush generator');
+
+		$this->runContainsComparison($em, $ofm, $product,
+			'ObjectManager (after persist)');
+
+		foreach ($objectManagers as $name => $om)
+			$om->flush();
+
+		$productIdFromEM = $product->getId();
+		$this->assertNotEquals($productIdFromEM, $productIdFromOFM,
+			'EM has has modified ID after flush');
+
+		$this->runContainsComparison($em, $ofm, $product,
+			'ObjectManager (flushed)');
+
+		$modifiedId = $product->getId() * 2;
+		$modifiedName = $product->getName() . ' (modified ID - ' .
+			$modifiedId . ')';
+		$product->setName($modifiedName);
+		$product->forceIdValue($modifiedId);
+
+		$this->compareImplementation(
+			[
+				'find' => [
+					$className,
+					$modifiedId
+				]
+			], $em, $ofm, 'find() with a modified ID');
+
+		foreach ($objectManagers as $name => $om)
+		{
+			$om->persist($product);
+			$om->flush();
+		}
+
+		$this->assertEquals($modifiedId, $product->getId(),
+			'Modified ID not altered after persist/flush');
+
+		foreach ($objectManagers as $name => $om)
+			$om->clear();
+
+		$this->runContainsComparison($em, $ofm, $product,
+			'ObjectManager (clear)');
+
+		$this->assertFalse($em->contains($product),
+			'EM does not contains P1 after clear');
+
+		$productFromEM = $em->find($className, $productIdFromEM);
+		$this->assertNotNull($productFromEM,
+			'Found P1 in EM by original ID');
+		$productFromOFM = $ofm->find($className, $productIdFromOFM);
+		$this->assertNotNull($productFromOFM,
+			'P1 found in FM by original ID');
+
+		$this->compareImplementation([
+			'getName'
+		], $productFromEM, $productFromOFM, 'find by original ID');
+
+		$this->assertTrue($em->contains($productFromEM),
+			'Product retrieved by EM find() is managed');
+		$this->assertTrue($ofm->contains($productFromOFM),
+			'Product found by OFM find() is managed');
+
+		$sameProductFromEM = $em->find($className, $productIdFromEM);
+		$this->assertEquals($productFromEM, $sameProductFromEM);
+		$a = \spl_object_hash($productFromEM);
+		$b = \spl_object_hash($sameProductFromEM);
+		$this->assertEquals($a, $b,
+			'Same call to EM::find(id) returns two different PHP objects.');
+
+		$sameProductFromOFM = $ofm->find($className, $productIdFromOFM);
+		$this->assertEquals($productFromOFM, $sameProductFromOFM);
+		$a = \spl_object_hash($productFromOFM);
+		$b = \spl_object_hash($sameProductFromOFM);
+		$this->assertEquals($a, $b,
+			'Same call to OFM::find(id) returns two different PHP objects.');
+
+		$productFromEMRepository = $em->getRepository($className)->findBy(
+			[
+				'name' => $modifiedName
+			]);
+		$this->assertIsArray($productFromEMRepository,
+			'EM::findBy(name) result');
+		$productFromEMRepository = Container::lastValue(
+			$productFromEMRepository);
+		$this->assertNotNull($productFromEMRepository,
+			'EM::findBy(name) found a product');
+		$this->assertTrue($em->contains($productFromEMRepository),
+			'Product found by EM::findBy(name) is managed');
+
+		$productFromOFMRepository = $ofm->getRepository($className)->findBy(
+			[
+				'name' => $modifiedName
+			]);
+		$this->assertIsArray($productFromOFMRepository,
+			'OFM::findBy(name) result');
+		$productFromOFMRepository = Container::lastValue(
+			$productFromOFMRepository);
+		$this->assertNotNull($productFromOFMRepository,
+			'OFM::findBy(name) found something');
+		$this->assertTrue($ofm->contains($productFromOFMRepository),
+			'Product found by OFM::findBy(name) is managed');
+
+		$badName = 'Bleeh';
+		foreach ([
+			[
+				$em,
+				$productFromEM,
+				$productIdFromEM
+			],
+			[
+				$ofm,
+				$productFromOFM,
+				$productIdFromOFM
+			]
+		] as $test)
+		{
+			$manager = $test[0];
+			$managerName = TypeDescription::getLocalName($manager);
+			$object = $test[1];
+			$object->setName($badName);
+			$id = $test[2];
+
+			$this->assertTrue($manager->contains($object),
+				$managerName . '::contains() before refresh()');
+
+			$manager->refresh($object);
+
+			$this->assertTrue($manager->contains($object),
+				$managerName . '::contains() after refresh()');
+
+			$this->assertEquals($modifiedName, $object->getName(),
+				$managerName . '::refresh() has restored $name');
+
+			$manager->detach($object);
+			$this->assertFalse($manager->contains($object),
+				$managerName . '::contains() after detach()');
+
+			$o = $manager->find($className, $id);
+			$this->assertNotNull($o,
+				$managerName . ' object ' . $id .
+				' is still foundable after detach');
+
+			$h1 = \spl_object_hash($object);
+			$h2 = \spl_object_hash($o);
+			$this->assertNotEmpty($a, $b,
+				$managerName .
+				' Finding a detached object must return a different object');
+
+			$exception = null;
+			try
+			{
+				$manager->remove($object);
+			}
+			catch (\Exception $e)
+			{
+				$exception = $e;
+			}
+			$this->assertInstanceOf(\Exception::class, $exception,
+				$managerName . ' cannot remove a detached object.');
+
+			$object = $o;
+			$this->assertTrue($manager->contains($object),
+				$managerName .
+				'::contains() after persist() (before remove)');
+
+			$manager->remove($object);
+
+			$this->assertFalse($manager->contains($object),
+				$managerName . '::contains() after remove()');
+
+			$manager->flush();
+
+			$o = $manager->find($className, $id);
+			$this->assertNull($o,
+				$managerName . ' object ' . $id .
+				' is removed after flush');
+		}
+	}
+
+	protected function runContainsComparison(ObjectManager $a,
+		ObjectManager $b, $object, $testName)
+	{
+		$tests = [
+			'contains' => [
+				$object
+			]
+		];
+		$this->compareImplementation($tests, $a, $b, $testName);
+	}
+
+	public function createFileObjectManagerForTest($method)
+	{
+		$a = TypeDescription::getLocalName($this);
+		$b = \preg_replace('/(?:.*::)?(?:test)?(.*)/', '$1', $method);
+		$classPaths = [
+			$this->getReferenceFileDirectory() . '/src'
+		];
+		$serializer = new SerializationManager();
+		$mediaType = MediaTypeFactory::getInstance()->createFromString(
+			'application/json');
+		$ofmConfiguration = OFMSetup::createReflectionDriverConfiguration(
+			$classPaths);
+		$ofmConfiguration->setBasePath(
+			$this->getDerivedFileDirectory() . '/' . $a . '/' . $b);
+		$ofmConfiguration->setSerializationManager($serializer);
+		$ofmConfiguration->setFileMediaType($mediaType);
+		$ofm = OFMSetup::createObjectManager($ofmConfiguration);
+
+		return $ofm;
+	}
+
+	public function createEntityManagerForTest($method,
+		$classNames = array(), $isDevMode = false)
+	{
+		$a = TypeDescription::getLocalName($this);
+		$b = \preg_replace('/(?:.*::)?(?:test)?(.*)/', '$1', $method);
+		$extension = 'sqlite';
+		$suffix = '';
+		$dcmPaths = [
+			$this->getReferenceFileDirectory() . '/dcm'
+		];
+		$configuration = ORMSetup::createXMLMetadataConfiguration(
+			$dcmPaths, $isDevMode);
+		$databasePath = $this->getDerivedFilename($method, $suffix,
+			$extension);
+		$this->assertCreateFileDirectoryPath($databasePath,
+			'Database path');
+		$em = $this->createEntityManager($configuration, $databasePath,
+			$classNames);
+		$this->appendDerivedFilename($databasePath, $isDevMode);
+		return $em;
 	}
 }

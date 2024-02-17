@@ -8,6 +8,7 @@
 
 		<many-to-one target-entity="BasicEntity" field="firstEntity" inversed-by="id" />
 		<many-to-one target-entity="BasicEntity" field="secondEntity" inversed-by="id" />
+		<many-to-one target-entity="DeeperEntity" field="thirdEntity" inversed-by="id" />
 		<field name="relationType" />
 
 	</entity>

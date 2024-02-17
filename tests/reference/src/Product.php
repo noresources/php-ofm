@@ -26,6 +26,11 @@ class Product
 		return $this->id;
 	}
 
+	public function forceIdValue($id)
+	{
+		$this->id = $id;
+	}
+
 	public function getName()
 	{
 		return $this->name;

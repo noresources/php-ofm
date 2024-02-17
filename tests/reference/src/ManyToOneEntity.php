@@ -8,6 +8,8 @@
  */
 namespace NoreSources\OFM\TestData;
 
+use NoreSources\OFM\TestData\Subspace\DeeperEntity;
+
 /**
  *
  * @persistent-entity schema=Tests
@@ -34,6 +36,12 @@ class ManyToOneEntity
 	 * @var BasicEntity
 	 */
 	public $secondEntity;
+
+	/**
+	 *
+	 * @var DeeperEntity
+	 */
+	public $thirdEntity;
 
 	/**
 	 * The kind of relationship between first and second entity.
