@@ -30,7 +30,9 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 	protected function fetchObjectAssociationProperty($object,
 		$fieldName)
 	{
-		$field = $this->getReflectionField($fieldName);
+		$field = $this->getReflectionService()->getAccessibleProperty(
+			$this->getClassMetadata()
+				->getName(), $fieldName);
 		$value = $field->getValue($object);
 		$metadata = $this->getClassMetadata();
 

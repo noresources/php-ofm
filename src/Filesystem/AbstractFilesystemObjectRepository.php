@@ -18,14 +18,14 @@ use Doctrine\Persistence\Mapping\ClassMetadata;
 use NoreSources\Container\Container;
 use NoreSources\MediaType\MediaTypeFileExtensionRegistry;
 use NoreSources\OFM\Filesystem\Traits\FilenameStrategyTrait;
-use NoreSources\Persistence\ClosureExpressionVisitorObjectSorter;
-use NoreSources\Persistence\DefaultObjectRuntimeIdGenerator;
 use NoreSources\Persistence\ObjectContainerInterface;
-use NoreSources\Persistence\ObjectIdentifier;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
 use NoreSources\Persistence\ObjectManagerProviderInterface;
-use NoreSources\Persistence\ObjectRuntimeIdGeneratorInterface;
-use NoreSources\Persistence\ObjectSorterInterface;
+use NoreSources\Persistence\Id\DefaultObjectRuntimeIdGenerator;
+use NoreSources\Persistence\Id\ObjectIdentifier;
+use NoreSources\Persistence\Id\ObjectRuntimeIdGeneratorInterface;
+use NoreSources\Persistence\Sorting\ClosureExpressionVisitorObjectSorter;
+use NoreSources\Persistence\Sorting\ObjectSorterInterface;
 use NoreSources\Persistence\Traits\ObjectManagerReferenceTrait;
 
 /**

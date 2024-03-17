@@ -23,7 +23,7 @@
 		}
 	}, 
 	"require": {
-		"noresources/persistence": "^0.8"
+		"noresources/persistence": "^0.10"
 	}, 
 	"scripts": {
 		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"

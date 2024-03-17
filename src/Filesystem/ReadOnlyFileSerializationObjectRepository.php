@@ -19,9 +19,9 @@ use NoreSources\MediaType\MediaTypeFileExtensionRegistry;
 use NoreSources\MediaType\MediaTypeInterface;
 use NoreSources\OFM\Filesystem\Traits\SerializationStrategyTrait;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
-use NoreSources\Persistence\ObjectSorterInterface;
-use NoreSources\Persistence\PropertyMappingInterface;
-use NoreSources\Persistence\PropertyMappingProviderInterface;
+use NoreSources\Persistence\Mapping\PropertyMappingInterface;
+use NoreSources\Persistence\Mapping\PropertyMappingProviderInterface;
+use NoreSources\Persistence\Sorting\ObjectSorterInterface;
 
 /**
  * Object repository that load objects from structured text files.
