@@ -12,6 +12,7 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\Mapping\ClassMetadataFactory;
 use NoreSources\OFM\OFMSetup;
+use NoreSources\OFM\TestUtility\LocalClassNameDirectoryMapper;
 use NoreSources\Persistence\Mapping\Driver\ReflectionDriver;
 use NoreSources\Test\DerivedFileTestTrait;
 
@@ -41,6 +42,60 @@ class ConfigurationTest extends \PHPUnit\Framework\TestCase
 		$this->assertInstanceOf(ClassMetadataFactory::class, $actual);
 	}
 
+	public function testLocalClassNameDirectoryMapper()
+	{
+		$namespaceDepth = 1;
+		$className = self::class;
+		$mapper = new LocalClassNameDirectoryMapper($namespaceDepth);
+		$actual = $mapper->getClassDirectory($className);
+		$expected = 'TestCase/ConfigurationTest';
+		$this->assertEquals($expected, $actual,
+			'Custom directory mapping');
+
+		$tests = [
+			'Class name only' => [
+				'descriptor' => [
+					'filesystem' => [
+						'directory-mapper' => LocalClassNameDirectoryMapper::class
+					]
+				],
+				'expected' => 'ConfigurationTest'
+			],
+			'With constructor parameters' => [
+				'descriptor' => [
+					'filesystem' => [
+						'directory-mapper' => [
+							'class-name' => LocalClassNameDirectoryMapper::class,
+							'namespace-depth' => 1
+						]
+					]
+				],
+				'expected' => 'TestCase/ConfigurationTest'
+			],
+			'With object' => [
+				'descriptor' => [
+					'filesystem' => [
+						'directory-mapper' => $mapper
+					]
+				],
+				'expected' => 'TestCase/ConfigurationTest'
+			]
+		];
+
+		foreach ($tests as $label => $test)
+		{
+			$descriptor = $test['descriptor'];
+			$expected = $test['expected'];
+			$configuration = OFMSetup::createConfigurationFromDescriptor(
+				$descriptor);
+			$mapper = $configuration->getDirectoryMapper();
+			$this->assertInstanceOf(
+				LocalClassNameDirectoryMapper::class, $mapper, $label);
+			$actual = $mapper->getClassDirectory($className);
+			$this->assertEquals($expected, $actual, $label);
+		}
+	}
+
 	public function testFile()
 	{
 		if (!\extension_loaded('json'))
@@ -52,9 +107,12 @@ class ConfigurationTest extends \PHPUnit\Framework\TestCase
 		$this->assertCreateFileDirectoryPath($derivedPath . '/a-file',
 			'Derived path');
 		$derivedPath = \realpath($derivedPath);
+		$variables = [
+			'project' => \realpath(__DIR__ . '/../..')
+		];
 		$filename = __DIR__ . '/../data/configuration.json';
 		$configuration = OFMSetup::createConfigurationFromDescriptorFile(
-			$filename);
+			$filename, null, $variables);
 		$driver = $configuration->getMappingDriver();
 
 		$this->assertEquals($derivedPath, $configuration->getBasePath(),

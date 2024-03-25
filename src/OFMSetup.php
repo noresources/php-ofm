@@ -18,8 +18,9 @@ use NoreSources\OFM\Filesystem\DirectoryMapperInterface;
 use NoreSources\OFM\Filesystem\FileSerializationObjectManager;
 use NoreSources\OFM\Filesystem\FilenameMapperInterface;
 use NoreSources\Persistence\Cache\CacheItemPoolAwareInterface;
-use NoreSources\Persistence\Mapping\ClassMetadataAwareInterface;
 use NoreSources\Persistence\Mapping\Driver\ReflectionDriver;
+use NoreSources\Text\Text;
+use NoreSources\Type\TypeDescription;
 
 /**
  * Utility class to create OFM-related objects
@@ -81,7 +82,7 @@ class OFMSetup
 	 * @return Configuration
 	 */
 	public static function createConfigurationFromDescriptor(
-		$descriptor, $workingDirectory = null)
+		$descriptor, $workingDirectory = null, $variables = array())
 	{
 		$defaults = [
 			'development' => false,
@@ -98,24 +99,29 @@ class OFMSetup
 			// 'extension' => 'json'
 			]
 		];
+
+		$options = Container::MERGE_RECURSE;
+		$descriptor = Container::merge($defaults, $descriptor, $options);
+
 		$flags = 0;
 		if (Container::keyValue($descriptor, 'development', false))
 			$flags |= self::DEVELOPMENT;
 		$configuration = new Configuration($flags);
 
-		$driver = Container::keyValue($descriptor, 'mapping-driver',
-			Container::keyValue($defaults, 'mapping-driver', []));
+		$mappingDriverDescriptor = Container::keyValue($descriptor,
+			'mapping-driver', []);
 
 		$metadata = Container::keyValue($descriptor, 'class-metadata',
-			Container::keyValue($defaults, 'metadata', []));
-
-		$filesystem = Container::keyValue($descriptor, 'filesystem',
-			Container::keyValue($defaults, 'filesystem', []));
+			[]);
+		$filesystem = Container::keyValue($descriptor, 'filesystem', []);
 
 		$paths = [];
-		if (($v = Container::keyValue($driver, 'paths', [])))
+		if (($v = Container::keyValue($mappingDriverDescriptor, 'paths',
+			[])))
 		{
-			$paths = $v;
+			foreach ($v as $text)
+				$paths[] = self::processConfigurationVariables($text,
+					$variables);
 		}
 
 		if (\is_string($workingDirectory))
@@ -132,34 +138,30 @@ class OFMSetup
 				}, $paths);
 		}
 
-		if (($v = Container::keyValue($driver, 'class',
-			Container::keyValue($defaults['mapping-driver'], 'class'))))
-		{
-			if (\is_string($v) && \class_exists($v) &&
-				\is_a($v, MappingDriver::class, true))
-			{
-				$v = new $v($paths);
-			}
+		$object = null;
+		$overrides = [
+			'paths' => $paths,
+			'locator' => $paths
+		];
 
-			$configuration->setMappingDriver($v);
+		if (self::retrieveObjectFromDescriptor($object, $descriptor,
+			'mapping-driver', $variables, $overrides,
+			MappingDriver::class))
+		{
+			$configuration->setMappingDriver($object);
 		}
 
-		if (($v = Container::keyValue($metadata, 'factory')))
+		$objectKey = 'factory';
+		$object = null;
+		if (self::retrieveObjectFromDescriptor($object, $metadata,
+			$objectKey, $variables, [], ClassMetadataFactory::class))
 		{
-			if (\is_string($v) && \class_exists($v) &&
-				\is_a($v, ClassMetadataFactory::class, true))
-				$v = new $v();
-
-			if ($v instanceof ClassMetadataAwareInterface &&
-				($c = Container::keyValue($metadata, 'class')))
-				$v->setMetadataClass($c);
-
-			$configuration->setMetadataFactory($v);
+			$configuration->setMetadataFactory($factory);
 		}
 
 		if (($v = Container::keyValue($filesystem, 'base-path')))
 		{
-			$p = $v;
+			$p = self::processConfigurationVariables($v, $variables);
 			if (\is_string($workingDirectory) && !Path::isAbsolute($v))
 				$p = $workingDirectory . '/' . $v;
 
@@ -169,20 +171,21 @@ class OFMSetup
 
 			$configuration->setBasePath(\realpath($p));
 		}
-		if (($v = Container::keyValue($filesystem, 'directormapper')))
+
+		$objectKey = 'directory-mapper';
+		if (self::retrieveObjectFromDescriptor($object, $filesystem,
+			$objectKey, $variables, [], DirectoryMapperInterface::class))
 		{
-			if (\is_string($v) && \class_exists($v) &&
-				\is_a($v, DirectoryMapperInterface::class, true))
-				$v = new $v();
-			$configuration->setDirectoryMapper($v);
+			$configuration->setDirectoryMapper($object);
 		}
-		if (($v = Container::keyValue($filesystem, 'filename-mapper')))
+
+		$objectKey = 'filename-mapper';
+		if (self::retrieveObjectFromDescriptor($object, $filesystem,
+			$objectKey, $variables, [], FilenameMapperInterface::class))
 		{
-			if (\is_string($v) && \class_exists($v) &&
-				\is_a($v, FilenameMapperInterface::class, true))
-				$v = new $v();
-			$configuration->setFilenameMapper($v);
+			$configuration->setFilenameMapper($object);
 		}
+
 		if (($v = Container::keyValue($filesystem, 'media-type')))
 		{
 			if (\is_string($v))
@@ -209,7 +212,7 @@ class OFMSetup
 	 * @return \NoreSources\OFM\Configuration
 	 */
 	public static function createConfigurationFromDescriptorFile(
-		$filename, $workingDirectory = null)
+		$filename, $workingDirectory = null, $variables = array())
 	{
 		if (!\file_exists($filename))
 			throw new \InvalidArgumentException(
@@ -219,7 +222,7 @@ class OFMSetup
 		$serializer = new SerializationManager();
 		$descriptor = $serializer->unserializeFromFile($filename);
 		return self::createConfigurationFromDescriptor($descriptor,
-			$workingDirectory);
+			$workingDirectory, $variables);
 	}
 
 	/**
@@ -235,5 +238,127 @@ class OFMSetup
 		$manager = new FileSerializationObjectManager();
 		$manager->configure($configuration);
 		return $manager;
+	}
+
+	/**
+	 *
+	 * @param object $object
+	 *        	Output object
+	 * @param array $descriptor
+	 *        	Descriptor
+	 * @param string $objectKey
+	 *        	Object key in descriptor
+	 * @param string|NULL $expectedInstanceOf
+	 * @return boolean TRUE if correctly retrieved
+	 */
+	protected static function retrieveObjectFromDescriptor(&$object,
+		$descriptor, $objectKey, $variables, $overrides = array(),
+		$expectedInstanceOf = null)
+	{
+		if (($descriptor = Container::keyValue($descriptor, $objectKey,
+			null)) === null)
+			return false;
+
+		if (\is_string($descriptor))
+			$descriptor = [
+				'class-name' => $descriptor
+			];
+
+		if (\is_array($descriptor))
+		{
+			$key = 'class-name';
+			if (!Container::keyExists($descriptor, $key))
+				$key = 'class';
+			$className = Container::keyValue($descriptor, $key);
+			if (!(\is_string($className) && \class_exists($className)))
+				return false;
+			unset($descriptor[$key]);
+
+			$descriptor = self::constructObjectFromDescriptor(
+				$className, $descriptor, $variables, $overrides);
+		}
+
+		if (!\is_object($descriptor))
+			throw new \InvalidArgumentException(
+				'Unexpected object descriptor type ' .
+				TypeDescription::getName($descriptor) .
+				'. Expect string, array or object.');
+
+		if (\is_string($expectedInstanceOf))
+		{
+			if (!\is_a($descriptor, $expectedInstanceOf))
+				throw new \InvalidArgumentException(
+					$expectedInstanceOf . ' expected');
+		}
+
+		$object = $descriptor;
+		return true;
+	}
+
+	protected static function constructObjectFromDescriptor($className,
+		$parameters, $variables, $parameterOverrides = array())
+	{
+		$class = new \ReflectionClass($className);
+		$constructor = $class->getConstructor();
+		$arguments = [];
+		foreach ($constructor->getParameters() as $parameter)
+		{
+			/**
+			 *
+			 * @var \ReflectionParameter $parameter
+			 */
+			$name = $parameter->getName();
+			if (Container::keyExists($parameterOverrides, $name))
+			{
+				$value = Container::keyValue($parameterOverrides, $name);
+				$arguments[] = $value;
+				continue;
+			}
+			$kebabName = Text::toKebabCase($name);
+			if (!Container::keyExists($parameters, $name) &&
+				!Container::keyExists($parameters, $kebabName))
+			{
+				if ($parameter->isOptional())
+					break;
+				try
+				{
+					$value = $parameter->getDefaultValue();
+					$arguments[] = $value;
+				}
+				catch (\Exception $e)
+				{
+					throw new \RuntimeException(
+						'Missing ' . $class->getName() .
+						' constructor argument $' . $name);
+				}
+				continue;
+			}
+
+			$value = Container::keyValue($parameters, $name,
+				Container::keyValue($parameters, $kebabName));
+			$arguments[] = $value;
+		}
+
+		return $class->newInstanceArgs($arguments);
+	}
+
+	/**
+	 *
+	 * @param string $text
+	 *        	Text
+	 * @param array $variables
+	 *        	Variable names and values
+	 */
+	protected static function processConfigurationVariables($text,
+		$variables)
+	{
+		do
+		{
+			$previous = $text;
+			foreach ($variables as $name => $value)
+				$text = \str_replace('${' . $name . '}', $value, $text);
+		}
+		while ($previous != $text);
+		return $text;
 	}
 }

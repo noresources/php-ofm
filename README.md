@@ -18,4 +18,5 @@ composer require noresources/ofm
 
 ## References
 * [Doctrine ORM](https://github.com/doctrine/orm)
-* [NoreSources Data](https://github.com/noresources/ofm)
+* [NoreSources Persistence](https://github.com/noresources/php-persistence)
+* [NoreSources Data](https://github.com/noresources/ns-php-data)

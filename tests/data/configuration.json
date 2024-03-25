@@ -1,7 +1,7 @@
 {
 	"mapping-driver": {
 		"paths": [
-			"../reference/src"
+			"${project}/tests/reference/src"
 		]
 	}, 
 	"filesystem": {
