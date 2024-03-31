@@ -300,6 +300,8 @@ class OFMSetup
 	{
 		$class = new \ReflectionClass($className);
 		$constructor = $class->getConstructor();
+		if (!$constructor)
+			return $class->newInstance();
 		$arguments = [];
 		foreach ($constructor->getParameters() as $parameter)
 		{
