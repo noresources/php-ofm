@@ -27,6 +27,7 @@ use NoreSources\Persistence\Id\ObjectRuntimeIdGeneratorInterface;
 use NoreSources\Persistence\Sorting\ClosureExpressionVisitorObjectSorter;
 use NoreSources\Persistence\Sorting\ObjectSorterInterface;
 use NoreSources\Persistence\Traits\ObjectManagerReferenceTrait;
+use NoreSources\Persistence\Expr\ClassMetadataClosureExpressionVisitor;
 
 /**
  * File-based object repository base implementation
@@ -209,8 +210,8 @@ abstract class AbstractFilesystemObjectRepository implements
 		$filtered = $this->findAll();
 		if ($expr)
 		{
-			$visitor = new ClosureExpressionVisitor();
-			$filter = $visitor->dispatch($expr);
+
+			$filter = $this->createFilter($expr);
 			$filtered = array_filter($filtered, $filter);
 		}
 
@@ -368,7 +369,8 @@ abstract class AbstractFilesystemObjectRepository implements
 	public function getObjectSorter()
 	{
 		if (!isset($this->objectSorter))
-			$this->objectSorter = new ClosureExpressionVisitorObjectSorter();
+			$this->objectSorter = new ClassMetadataClosureExpressionVisitor(
+				$this->getClassMetadata());
 		return $this->objectSorter;
 	}
 
@@ -492,7 +494,8 @@ abstract class AbstractFilesystemObjectRepository implements
 	protected function createFilter(Expression $expression)
 	{
 		if (!isset($this->closureExpressionVisitor))
-			$this->closureExpressionVisitor = new ClosureExpressionVisitor();
+			$this->closureExpressionVisitor = new ClassMetadataClosureExpressionVisitor(
+				$this->getClassMetadata());
 		return $this->closureExpressionVisitor->dispatch($expression);
 	}
 
