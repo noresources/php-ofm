@@ -128,11 +128,10 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 				else
 					$fieldData[$k] = $v;
 			}
-			$this->getPropertyMapper()->assignObjectProperties($object,
-				$fieldData);
+			$mapper = $this->getPropertyMapper();
+			$mapper->assignObjectProperties($object, $fieldData);
 			$this->cacheObject($object);
-			$this->getPropertyMapper()->assignObjectProperties($object,
-				$associationData);
+			$mapper->assignObjectProperties($object, $associationData);
 		}
 		else
 			$this->getPropertyMapper()->assignObjectProperties($object,
