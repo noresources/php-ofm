@@ -12,6 +12,7 @@ use NoreSources\Container\Container;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Mapping\ClassMetadataReflectionPropertyMapper;
 use NoreSources\Reflection\ReflectionServiceInterface;
+use NoreSources\Type\TypeConversion;
 
 /**
  * Extension of the ClassMetadataReflectionPropertyMapper that handle object associations and
@@ -104,17 +105,35 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 	protected function unserializeEmbeddedObject($value, $fieldName,
 		$expectedClassName)
 	{
+		if (\is_string($value))
+		{
+			try
+			{
+				$v = @\unserialize($value);
+				if (\is_a($v, $expectedClassName))
+					return $v;
+			}
+			catch (\Exception $e)
+			{}
+		}
+		try
+		{
+			return TypeConversion::to($expectedClassName, $value,
+				[
+					TypeConversion::OPTION_FLAGS => TypeConversion::OPTION_FLAG_OBJECT_FACTORY
+				]);
+		}
+		catch (\Exception $e)
+		{}
+
 		if (!Container::isTraversable($value))
 			return $value;
 		$rs = $this->getReflectionService();
 		$instantiator = $this->getInstantiator();
 		$instance = $instantiator->instantiate($expectedClassName);
-		$flags = (ReflectionServiceInterface::WRITABLE |
-			ReflectionServiceInterface::EXPOSE_HIDDEN_PROPERTY);
-		$class = $rs->getReflectionClass($expectedClassName);
 		foreach ($value as $k => $v)
 		{
-			$field = $rs->getReflectionProperty($class, $k, $flags);
+			$field = $rs->getAccessibleProperty($expectedClassName, $k);
 			$field->setValue($instance, $value);
 		}
 		return $instance;
