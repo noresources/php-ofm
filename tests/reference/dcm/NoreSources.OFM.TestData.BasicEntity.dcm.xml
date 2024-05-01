@@ -12,7 +12,7 @@
 			<lifecycle-callback type="prePersist" method="prePersistTask" />
 		</lifecycle-callbacks>
 		<entity-listeners>
-			<entity-listener class="\NoreSources\OFM\TestUtility\TestEntityListener" />
+			<entity-listener class="\NoreSources\Persistence\TestUtility\TestEntityListener" />
 		</entity-listeners>
 	</entity>
 </doctrine-mapping>

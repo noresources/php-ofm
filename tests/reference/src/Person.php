@@ -10,7 +10,7 @@ namespace NoreSources\OFM\TestData;
 
 /**
  *
- * @persistent-entity mapped-superclass=true
+ * @persistent-object mapped-superclass=true
  *
  */
 class Person
@@ -19,7 +19,7 @@ class Person
 	/**
 	 * First name
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var string|NULL
 	 */
 	public $firstName;
@@ -27,7 +27,7 @@ class Person
 	/**
 	 * Last name
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var string|NULL
 	 */
 	public $lastName;
@@ -50,7 +50,7 @@ class Person
 	 *
 	 * Birth sex
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 *
 	 * @var integer|null
 	 */

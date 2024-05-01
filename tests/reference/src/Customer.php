@@ -10,7 +10,7 @@ namespace NoreSources\OFM\TestData;
 
 /**
  *
- * @persistent-entity
+ * @persistent-object
  *
  */
 class Customer extends Person
@@ -28,7 +28,7 @@ class Customer extends Person
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var \DateTimeInterface
 	 */
 	public $birthDate;

@@ -140,6 +140,52 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 		return $object;
 	}
 
+	public function fetchIndexDataFromFile($filename)
+	{
+		return $this->getSerializationManager()->unserializeFromFile(
+			$filename, $this->mediaType);
+	}
+
+	public function refreshFieldIndexes()
+	{
+		$indexedFieldNames = $this->getIndexedFieldNames();
+		$indexes = [];
+
+		$metadata = $this->getClassMetadata();
+		$className = $metadata->getName();
+		$properties = [];
+		$reflectionService = \NoreSources\Persistence\Mapping\ReflectionService::getInstance();
+
+		foreach ($indexedFieldNames as $fieldName)
+		{
+			$properties[$fieldName] = $reflectionService->getAccessibleProperty(
+				$className, $fieldName);
+			$indexes[$fieldName] = $this->getFieldIndex($fieldName);
+			$indexes[$fieldName]->clear();
+		}
+
+		$files = $this->getObjectFiles();
+		$idFields = $metadata->getIdentifierFieldNames();
+		$mediaType = $this->getFileMediaType();
+
+		foreach ($files as $filename)
+		{
+			$flags = 0;
+			$object = $this->fetchObjectFromFile($filename, $flags);
+
+			$objectId = $metadata->getIdentifierValues($object);
+
+			$data = [];
+			$this->getPropertyMapper()->fetchObjectProperties($data,
+				$object);
+			foreach ($properties as $fieldName => $property)
+			{
+				$indexValue = $property->getValue($object);
+				$indexes[$fieldName]->append($indexValue, $objectId);
+			}
+		}
+	}
+
 	/**
 	 *
 	 * @return FileUnserializerInterface

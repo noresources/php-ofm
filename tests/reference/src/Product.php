@@ -3,7 +3,7 @@ namespace NoreSources\OFM\TestData;
 
 /**
  *
- * @persistent-entity table=products
+ * @persistent-object table=products
  */
 class Product
 {
@@ -17,7 +17,7 @@ class Product
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 */
 	protected $name;
 

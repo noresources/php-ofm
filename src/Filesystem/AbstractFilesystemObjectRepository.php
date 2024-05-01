@@ -18,24 +18,30 @@ use Doctrine\Persistence\Mapping\ClassMetadata;
 use NoreSources\Container\Container;
 use NoreSources\MediaType\MediaTypeFileExtensionRegistry;
 use NoreSources\OFM\Filesystem\Traits\FilenameStrategyTrait;
+use NoreSources\Persistence\Index;
+use NoreSources\Persistence\NotManagedException;
 use NoreSources\Persistence\ObjectContainerInterface;
+use NoreSources\Persistence\ObjectFieldIndexRepositoryInterface;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
 use NoreSources\Persistence\ObjectManagerProviderInterface;
+use NoreSources\Persistence\Event\Traits\EventManagerAwareTrait;
+use NoreSources\Persistence\Expr\ClassMetadataClosureExpressionVisitor;
 use NoreSources\Persistence\Id\DefaultObjectRuntimeIdGenerator;
 use NoreSources\Persistence\Id\ObjectIdentifier;
 use NoreSources\Persistence\Id\ObjectRuntimeIdGeneratorInterface;
-use NoreSources\Persistence\Sorting\ClosureExpressionVisitorObjectSorter;
+use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Sorting\ObjectSorterInterface;
 use NoreSources\Persistence\Traits\ObjectManagerReferenceTrait;
-use NoreSources\Persistence\Expr\ClassMetadataClosureExpressionVisitor;
 
 /**
  * File-based object repository base implementation
  */
 abstract class AbstractFilesystemObjectRepository implements
-	ObjectRepository, Selectable, ObjectManagerProviderInterface,
-	ObjectManagerAwareInterface, ObjectContainerInterface
+	ObjectRepository, ObjectFieldIndexRepositoryInterface, Selectable,
+	ObjectManagerProviderInterface, ObjectManagerAwareInterface,
+	ObjectContainerInterface
 {
+	use EventManagerAwareTrait;
 	use FilenameStrategyTrait;
 	use ObjectManagerReferenceTrait;
 
@@ -97,10 +103,38 @@ abstract class AbstractFilesystemObjectRepository implements
 		if ($limit === 0)
 			return [];
 
+		$indexedFieldNames = $this->getIndexedFieldNames();
+		$indexedCriteria = Container::filterKeys($criteria,
+			function ($name) use ($indexedFieldNames) {
+				return \in_array($name, $indexedFieldNames);
+			});
+
 		$filter = null;
 		$list = [];
 		$orderBy = $this->normalizeSortedBy($orderBy);
-		$files = $this->getObjectFiles();
+
+		if (\count($indexedCriteria))
+		{
+			$files = [];
+			foreach ($indexedCriteria as $fieldName => $indexValue)
+			{
+				unset($criteria[$fieldName]);
+				$index = $this->getFieldIndex($fieldName);
+				if (!$index->has($indexValue))
+					return [];
+				$ids = $index->get($indexValue);
+				foreach ($ids as $id)
+					$files[] = $this->getObjectIdentifierFile($id);
+			}
+
+			$files = \array_unique($files);
+		}
+		else
+			$files = $this->getObjectFiles();
+
+		if (\count($files) == 0)
+			return [];
+
 		\ksort($files);
 
 		if (\count($criteria) > 0)
@@ -251,7 +285,36 @@ abstract class AbstractFilesystemObjectRepository implements
 		$id = $metadata->getIdentifierValues($object);
 		$hash = $this->getFilenameMapper()->getBasename($id);
 		$this->identityMappings[$oid] = $hash;
+
 		$this->objectCache[$hash] = $object;
+		$this->originalObjectCache[$oid] = clone $object;
+	}
+
+	public function getObjectOriginalCopy(object $object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (!isset($this->identityMappings[$oid]))
+			return;
+		if (!isset($this->originalObjectCache[$oid]))
+			return NULL;
+		return $this->originalObjectCache[$oid];
+	}
+
+	public function setObjectOriginalCopy(object $object,
+		object $original)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (!isset($this->identityMappings[$oid]))
+			throw new NotManagedException($object);
+		$this->originalObjectCache[$oid] = $original;
+	}
+
+	private function getObjectOID($object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
 	}
 
 	public function detach($object)
@@ -259,10 +322,20 @@ abstract class AbstractFilesystemObjectRepository implements
 		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
-			return;
+			throw new NotManagedException($object);
 		$hash = $this->identityMappings[$oid];
+
 		unset($this->identityMappings[$oid]);
 		unset($this->objectCache[$hash]);
+		if (isset($this->originalObjectCache[$oid]))
+			unset($this->originalObjectCache[$oid]);
+	}
+
+	public function detachAll()
+	{
+		$this->identityMappings = [];
+		$this->objectCache = [];
+		$this->originalObjectCache = [];
 	}
 
 	/**
@@ -338,10 +411,6 @@ abstract class AbstractFilesystemObjectRepository implements
 		return $map;
 	}
 
-	/*
-	 * public function getClassName();
-	 */
-
 	/**
 	 *
 	 * @param string $filename
@@ -402,6 +471,98 @@ abstract class AbstractFilesystemObjectRepository implements
 	}
 
 	/**
+	 * Get the field index data filename for a given field
+	 *
+	 * @param unknown $fieldName
+	 *        	Indexed field name
+	 * @return NULL|string Field index data file name
+	 */
+	public function getFieldIndexFile($fieldName)
+	{
+		$basePath = \realpath($this->basePath);
+		if (!$basePath)
+			return null;
+		$basename = $this->getFilenameMapper()->getBasename($fieldName);
+		return $basePath . '.' . $basename . '.index.' .
+			$this->getFileExtension();
+	}
+
+	/**
+	 * Get all field index file names
+	 *
+	 * @return array<string, string
+	 */
+	public function getFieldIndexFiles()
+	{
+		$list = [];
+		foreach ($this->getIndexedFieldNames() as $fieldName)
+			$list[$fieldName] = $this->getFieldIndexFile($fieldName);
+		return $list;
+	}
+
+	/**
+	 *
+	 * @param string $fieldName
+	 *        	Field name
+	 * @return Index
+	 */
+	public function getFieldIndex($fieldName)
+	{
+		if (isset($this->indexes[$fieldName]))
+			return $this->indexes[$fieldName];
+		$filename = $this->getFieldIndexFile($fieldName);
+		if (\is_file($filename))
+		{
+			$data = $this->fetchIndexDataFromFile($filename);
+			$index = new Index($data);
+		}
+		else
+			$index = new Index();
+		$this->indexes[$fieldName] = $index;
+		return $index;
+	}
+
+	public function refreshFieldIndexes()
+	{
+		$indexedFieldNames = $this->getIndexedFieldNames();
+		$indexes = [];
+
+		$metadata = $this->getClassMetadata();
+		$className = $metadata->getName();
+		$properties = [];
+		$reflectionService = \NoreSources\Persistence\Mapping\ReflectionService::getInstance();
+
+		foreach ($indexedFieldNames as $fieldName)
+		{
+			$properties[$fieldName] = $reflectionService->getAccessibleProperty(
+				$className, $fieldName);
+			$indexes[$fieldName] = $this->getFieldIndex($fieldName);
+			$indexes[$fieldName]->clear();
+		}
+
+		$files = $this->getObjectFiles();
+		$idFields = $metadata->getIdentifierFieldNames();
+		$mediaType = $this->getFileMediaType();
+
+		foreach ($files as $filename)
+		{
+			$flags = 0;
+			$object = $this->fetchObjectFromFile($filename, $flags);
+
+			$objectId = $metadata->getIdentifierValues($object);
+
+			$data = [];
+			$this->getPropertyMapper()->fetchObjectProperties($data,
+				$object);
+			foreach ($properties as $fieldName => $property)
+			{
+				$indexValue = $property->getValue($object);
+				$indexes[$fieldName]->append($indexValue, $objectId);
+			}
+		}
+	}
+
+	/**
 	 *
 	 * @return string Storage base path
 	 */
@@ -430,6 +591,34 @@ abstract class AbstractFilesystemObjectRepository implements
 				$extension);
 	}
 
+	public function getIndexedFieldNames()
+	{
+		if (isset($this->indexedFieldNames))
+			return $this->indexedFieldNames;
+		$this->indexedFieldNames = [];
+		$table = null;
+		$metadata = $this->getClassMetadata();
+		$arguments = [];
+		ClassMetadataAdapter::retrieveMetadataElement($table, $metadata,
+			'table', ...$arguments);
+		if (ClassMetadataAdapter::retrieveMetadataElement($table,
+			$metadata, 'table', ...$arguments) &&
+			Container::isArray($table) &&
+			($indexes = Container::keyValue($table, 'indexes')))
+		{
+			foreach ($indexes as $index)
+			{
+				if (isset($index['fields']) &&
+					\count($index['fields']) == 1)
+					$this->indexedFieldNames[] = $index['fields'][0];
+			}
+		}
+
+		$this->indexedFieldNames = \array_unique(
+			$this->indexedFieldNames);
+		return $this->indexedFieldNames;
+	}
+
 	public function getCachedObject($id, $normalized = false)
 	{
 		$metadata = $this->getClassMetadata();
@@ -446,16 +635,23 @@ abstract class AbstractFilesystemObjectRepository implements
 		$metadata = $this->getClassMetadata();
 		$id = ObjectIdentifier::normalize($object, $metadata);
 		$hash = $this->getFilenameMapper()->getBasename($id);
-		$this->objectCache[$hash] = $object;
 		$this->identityMappings[$oid] = $hash;
+
+		$this->objectCache[$hash] = $object;
+		$this->originalObjectCache[$oid] = clone $object;
 	}
 
-	public function uncacheObject($objectOrId)
+	public function uncacheObject($object)
 	{
-		$metadata = $this->getClassMetadata();
-		$id = ObjectIdentifier::normalize($objectOrId, $metadata);
-		$hash = $this->getFilenameMapper()->getBasename($id);
+		if (!\is_object($object))
+			throw new \InvalidArgumentException();
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (!isset($this->identityMappings[$oid]))
+			return;
+		$hash = $this->identityMappings[$oid];
 		unset($this->objectCache[$hash]);
+		unset($this->originalObjectCache[$oid]);
 	}
 
 	/**
@@ -529,6 +725,8 @@ abstract class AbstractFilesystemObjectRepository implements
 	 */
 	private $objectCache = [];
 
+	private $originalObjectCache = [];
+
 	/**
 	 * Object runtime identifier -> File identifier map
 	 *
@@ -541,4 +739,16 @@ abstract class AbstractFilesystemObjectRepository implements
 	 * @var ObjectRuntimeIdGeneratorInterface
 	 */
 	private $objectRuntimeIndentifierGenerator;
+
+	/**
+	 *
+	 * @var array<string>
+	 */
+	private $indexedFieldNames;
+
+	/**
+	 *
+	 * @var Index[]
+	 */
+	private $indexes;
 }

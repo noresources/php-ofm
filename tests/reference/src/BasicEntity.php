@@ -10,9 +10,9 @@ namespace NoreSources\OFM\TestData;
 
 /**
  *
- * @persistent-entity table=Test_BasicEntity; schema=Tests
+ * @persistent-object table=Test_BasicEntity; schema=Tests
  * @persistent-lifecycle-callbacks pre-persist=prePersistTask
- * @persistent-entity-listener class="\\NoreSources\\OFM\\TestUtility\\TestEntityListener"
+ * @persistent-object-listener class="\\NoreSources\\Persistence\\TestUtility\\TestEntityListener"
  *
  */
 class BasicEntity
@@ -30,14 +30,14 @@ class BasicEntity
 	/**
 	 * The entity name
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var string
 	 */
 	public $name;
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var string|NULL
 	 */
 	public $nickname;
@@ -65,7 +65,7 @@ class BasicEntity
 	/**
 	 * The date of the beginning of the master plan to rule the world.
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var \DateTimeInterface
 	 */
 	private $secret;

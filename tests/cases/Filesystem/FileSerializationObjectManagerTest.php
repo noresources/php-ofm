@@ -13,20 +13,25 @@ use Doctrine\ORM\ORMSetup;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\ObjectManager;
 use Doctrine\Persistence\ObjectRepository;
+use Doctrine\Persistence\Event\PreUpdateEventArgs;
 use Doctrine\Persistence\Mapping\ClassMetadata;
 use NoreSources\Container\Container;
 use NoreSources\Data\Serialization\SerializationManager;
 use NoreSources\MediaType\MediaTypeFactory;
 use NoreSources\OFM\OFMSetup;
+use NoreSources\OFM\Filesystem\AbstractFilesystemObjectRepository;
+use NoreSources\OFM\Filesystem\FileSerializationObjectManager;
 use NoreSources\OFM\TestData\Bug;
 use NoreSources\OFM\TestData\Customer;
 use NoreSources\OFM\TestData\EntityWithEmbeddedObject;
 use NoreSources\OFM\TestData\Person;
 use NoreSources\OFM\TestData\Product;
 use NoreSources\OFM\TestData\User;
+use NoreSources\Persistence\Index;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
 use NoreSources\Persistence\ObjectManagerProviderInterface;
 use NoreSources\Persistence\ObjectManagerRegistry;
+use NoreSources\Persistence\Event\Event;
 use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Mapping\GenericClassMetadataFactory;
@@ -37,6 +42,31 @@ use NoreSources\Persistence\TestUtility\ResultComparisonTrait;
 use NoreSources\Persistence\TestUtility\TestEntityManagerFactoryTrait;
 use NoreSources\Test\DerivedFileTestTrait;
 use NoreSources\Type\TypeDescription;
+use PHPUnit\Framework\TestCase;
+
+class EventManagerObserver
+{
+
+	public $invocationCount = 0;
+
+	public function __construct(TestCase $test)
+	{
+		$this->test = $test;
+	}
+
+	public function preUpdate($eventArgs)
+	{
+		$this->invocationCount++;
+		$this->test->assertInstanceOf(PreUpdateEventArgs::class,
+			$eventArgs);
+	}
+
+	/**
+	 *
+	 * @var TestCase
+	 */
+	private $test;
+}
 
 class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 {
@@ -57,34 +87,187 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 	public function tearDown(): void
 	{
 		$this->tearDownDerivedFileTestTrait();
+		foreach ($this->objectFileManagers as $ofm)
+		{
+			/**
+			 *
+			 * @var FileSerializationObjectManager $ofm
+			 * @var ClassMetadata $metadata
+			 * @var AbstractFilesystemObjectRepository $repository
+			 */
+			foreach ($ofm->getMetadataFactory()->getAllMetadata() as $metadata)
+			{
+				$className = $metadata->getName();
+				if (!$ofm->hasRepository($className))
+					continue;
+				$repository = $ofm->getRepository($className);
+				$files = \array_merge($repository->getObjectFiles(),
+					$repository->getFieldIndexFiles());
+				foreach ($files as $filename)
+				{
+					if (\file_exists($filename))
+						\unlink($filename);
+				}
+			}
+		}
+	}
+
+	public function testIndexedFields()
+	{
+		$method = __METHOD__;
+		$className = User::class;
+
+		$ofm = $this->createFileObjectManagerForTest($method);
+		/**
+		 *
+		 * @var AbstractFilesystemObjectRepository $repository
+		 */
+		$repository = $ofm->getRepository($className);
+		$this->assertInstanceOf(
+			AbstractFilesystemObjectRepository::class, $repository);
+		$indexedFieldNames = $repository->getIndexedFieldNames();
+		$this->assertContains('name', $indexedFieldNames,
+			'Indexed field names');
+
+		$map = [
+			'alice' => [
+				'names' => [
+					'Alisson',
+					'Alice'
+				]
+			],
+			'bob' => [
+				'names' => [
+					'Bebert',
+					'Bob'
+				]
+			],
+			'eve' => [
+				'names' => [
+					'Yves',
+					'Eve'
+				]
+			],
+			'Foo' => [
+				'names' => [
+					'Fou',
+					'Foo'
+				]
+			],
+			'bar' => [
+				'names' => [
+					'Boar',
+					'Bar'
+				]
+			]
+		];
+
+		foreach ($map as $key => $data)
+		{
+			$names = $data['names'];
+			$user = new User();
+			$user->setName($names[0]);
+			$ofm->persist($user);
+
+			$map[$key]['object'] = $user;
+			$map[$key]['id'] = $user->getId();
+		}
+		$ofm->flush();
+
+		$all = $repository->findAll();
+		$this->assertCount(\count($map), $all, 'All users persisted');
+
+		$index = $repository->getFieldIndex('name');
+		$this->assertInstanceOf(Index::class, $index);
+
+		foreach ($map as $key => $data)
+		{
+			$names = $data['names'];
+			$a = $repository->findOneBy([
+				'name' => $names[0]
+			]);
+
+			$this->assertInstanceOf($className, $a,
+				'Find ' . $key . ' by name ' . $names[0]);
+			$objectId = $a->getId();
+
+			// DO NOT DO THIS AT HOME
+			$index->move($names[0], $names[1], $objectId);
+
+			$this->assertTrue($index->has($names[1]),
+				'Index has new value');
+
+			$b = $repository->findOneBy([
+				'name' => $names[0]
+			]);
+			$this->assertNull($b, 'Modified index will');
+
+			$c = $repository->findOneBy([
+				'name' => $names[1]
+			]);
+			$this->assertEquals($a, $c, 'Object found using index');
+		}
+
+		$repository->refreshFieldIndexes();
+
+		foreach ($map as $key => $data)
+		{
+			$names = $data['names'];
+			$a = $repository->findOneBy([
+				'name' => $names[0]
+			]);
+
+			$this->assertInstanceOf($className, $a,
+				'Find ' . $key . ' by name ' . $names[0] .
+				' (after index refresh)');
+		}
+	}
+
+	public function testEventManager()
+	{
+		$method = __METHOD__;
+		$className = User::class;
+
+		$ofm = $this->createFileObjectManagerForTest($method);
+		$listener = new EventManagerObserver($this);
+		$ofm->getEventManager()->addEventListener([
+			Event::preUpdate
+		], $listener);
+
+		$alice = new User();
+		$alice->setName('Alisson');
+
+		$this->assertNull($alice->getId(), 'No ID before flush');
+
+		$ofm->persist($alice);
+		$this->assertEquals(0, $listener->invocationCount,
+			'listener not invoked before flush');
+		$ofm->flush();
+
+		$this->assertNotNull($alice->getId(), 'ID set after flush');
+
+		$this->assertEquals(0, $listener->invocationCount,
+			'Listener not invoked after first flush');
+
+		$alice->setName('Alice');
+		$ofm->persist($alice);
+		$ofm->flush();
+		$this->assertEquals(0, $listener->invocationCount,
+			'Listener invoked after second flush');
 	}
 
 	public function testIdGeneratorUsingManagerWithReflectionDriver()
 	{
-		$serializationManager = new SerializationManager();
-		$mediaType = MediaTypeFactory::getInstance()->createFromString(
-			'application/json');
-		$basePath = $this->getDerivedFileDirectory();
-
-		$paths = [
-			$this->getReferenceFileDirectory() . '/src'
-		];
+		$method = __METHOD__;
+		$ofm = $this->createFileObjectManagerForTest($method);
 
 		$className = Product::class;
 
-		$configuration = OFMSetup::createReflectionDriverConfiguration(
-			$paths);
-		$configuration->setSerializationManager($serializationManager);
-		$configuration->setBasePath($basePath);
-		$configuration->setFileMediaType($mediaType);
-
-		$fsManager = OFMSetup::createObjectManager($configuration);
-
 		$this->assertInstanceOf(MappingDriverProviderInterface::class,
-			$fsManager->getMetadataFactory(),
+			$ofm->getMetadataFactory(),
 			'Metadata factory type in manager');
 
-		$productMetadata = $fsManager->getMetadataFactory()->getMetadataFor(
+		$productMetadata = $ofm->getMetadataFactory()->getMetadataFor(
 			Product::class);
 		$this->assertEquals(Product::class, $productMetadata->getName(),
 			'ClassMetadata::getName() returns qualified class name');
@@ -123,17 +306,17 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->assertEquals($foredId, $productB->getId(),
 			'ProductB ID before persist');
 
-		$fsManager->persist($productA);
+		$ofm->persist($productA);
 		$this->assertNotNull($productA->getId(),
 			'ProductA ID set after persist');
 
-		$fsManager->persist($productB);
+		$ofm->persist($productB);
 		$this->assertNotEquals($foredId, $productB->getId(),
 			'Product B ID re-assigned after persist new.');
 
-		$fsManager->flush();
+		$ofm->flush();
 
-		$filename = $fsManager->getObjectFile($productA);
+		$filename = $ofm->getObjectFile($productA);
 		$this->assertFileExists($filename, 'Product persistent file');
 		$this->appendDerivedFilename($filename, false);
 	}
@@ -231,25 +414,27 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$configuration->setBasePath($basePath);
 		$configuration->setFileMediaType($mediaType);
 
-		$fsManager = OFMSetup::createObjectManager($configuration);
-		$fsManager->setListenerInvoker($invoker);
+		$ofm = OFMSetup::createObjectManager($configuration);
+		$ofm->setListenerInvoker($invoker);
+
+		$this->objectFileManagers[] = $ofm;
 
 		$className = User::class;
 
-		$metadata = $fsManager->getClassMetadata($className);
+		$metadata = $ofm->getClassMetadata($className);
 		$idFields = $metadata->getIdentifierFieldNames();
 		$this->assertEquals([
 			'id'
 		], $idFields, 'User id fields');
 
-		$repository = $fsManager->getRepository($className);
+		$repository = $ofm->getRepository($className);
 
 		$this->assertInstanceOf(ObjectRepository::class, $repository,
 			'Repository for ' . $className);
 
 		$this->assertInstanceOf(ObjectManagerProviderInterface::class,
 			$repository);
-		$this->assertEquals($fsManager, $repository->getObjectManager(),
+		$this->assertEquals($ofm, $repository->getObjectManager(),
 			'Repository has a object manager reference');
 
 		$mapper = $repository->getPropertyMapper();
@@ -258,7 +443,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			$mapper);
 		$this->assertInstanceOf(ObjectManagerProviderInterface::class,
 			$mapper);
-		$this->assertEquals($fsManager, $mapper->getObjectManager());
+		$this->assertEquals($ofm, $mapper->getObjectManager());
 		// EntityManager
 		$isDevMode = false;
 		$em = $this->createEntityManagerForTest($method, [
@@ -271,10 +456,10 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->assertEquals(0, $a->updateCount,
 			'User.updateCount initial value');
 
-		if ($fsManager->find($className, 'alice'))
+		if ($ofm->find($className, 'alice'))
 		{
-			$fsManager->remove($a);
-			$fsManager->flush();
+			$ofm->remove($a);
+			$ofm->flush();
 		}
 
 		if ($em->find($className, $a))
@@ -283,18 +468,18 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			$em->flush();
 		}
 
-		$this->assertNull($fsManager->find($className, 'alice'),
+		$this->assertNull($ofm->find($className, 'alice'),
 			'Alice does not exist in FS repository');
 
 		$this->assertNull($em->find($className, 'alice'),
 			'Alice does not exist in EM repository');
 
-		$this->assertFalse($fsManager->contains($a),
+		$this->assertFalse($ofm->contains($a),
 			'FS Unit of work does not contain alice');
 		$this->assertFalse($em->contains($a),
 			'EM Unit of work does not contain alice');
 
-		$fsManager->persist($a);
+		$ofm->persist($a);
 		$this->assertEquals(1, $a->persistCount,
 			'prePersist callback called just after first FS persist');
 
@@ -305,17 +490,17 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->assertEquals(0, $a->updateCount,
 			'preUpdate callback not called on first persist');
 
-		$this->assertTrue($fsManager->contains($a),
+		$this->assertTrue($ofm->contains($a),
 			'FS Unit of work contains alice');
 		$this->assertTrue($em->contains($a),
 			'EM Unit of work contains alice');
 
-		$fsManager->flush();
+		$ofm->flush();
 
-		$found = $fsManager->find($className, 'alice');
+		$found = $ofm->find($className, 'alice');
 		$this->assertEquals($a, $found, 'Alice was found');
 
-		$filename = $fsManager->getObjectFile($a);
+		$filename = $ofm->getObjectFile($a);
 		$this->assertFileExists($filename, '$a object file');
 		$this->appendDerivedFilename($filename, false);
 	}
@@ -618,7 +803,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			$om->clear();
 
 		$this->runContainsComparison($em, $ofm, $product,
-			'ObjectManager (clear)');
+			'ObjectManager (after clear)');
 
 		$this->assertFalse($em->contains($product),
 			'EM does not contains P1 after clear');
@@ -784,7 +969,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$ofmConfiguration->setSerializationManager($serializer);
 		$ofmConfiguration->setFileMediaType($mediaType);
 		$ofm = OFMSetup::createObjectManager($ofmConfiguration);
-
+		$this->objectFileManagers[] = $ofm;
 		return $ofm;
 	}
 
@@ -809,4 +994,10 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 		$this->appendDerivedFilename($databasePath, $isDevMode);
 		return $em;
 	}
+
+	/**
+	 *
+	 * @var FileSerializationObjectManager[]
+	 */
+	private $objectFileManagers = [];
 }

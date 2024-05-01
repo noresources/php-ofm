@@ -105,6 +105,7 @@ class FileSerializationObjectManager implements ObjectManager,
 	 *
 	 * {@inheritdoc}
 	 * @see \Doctrine\Persistence\ObjectManager::getRepository()
+	 * @return ObjectRepository
 	 */
 	public function getRepository($className)
 	{
@@ -193,8 +194,8 @@ class FileSerializationObjectManager implements ObjectManager,
 				'General base path is mandatory to use non-absolute path from ' .
 				TypeDescription::getName($dm));
 
-		return $this->basePath . '/' .
-			$dm->getClassDirectory($className);
+		return $this->basePath . '/' . $dm->getClassDirectory(
+			$className);
 	}
 
 	/**

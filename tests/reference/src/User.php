@@ -7,7 +7,7 @@ use Doctrine\Persistence\Event\LifecycleEventArgs;
 /**
  *
  * @Entity @Table(name="users")
- * @persistent-entity table=users
+ * @persistent-object table=users
  */
 class User
 {
@@ -22,7 +22,7 @@ class User
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property indexed=true
 	 * @var string
 	 */
 	protected $name;
@@ -45,14 +45,14 @@ class User
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var integer
 	 */
 	public $persistCount = 0;
 
 	/**
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var integer
 	 */
 	public $updateCount = 0;

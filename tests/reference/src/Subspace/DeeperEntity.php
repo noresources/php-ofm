@@ -11,7 +11,7 @@ namespace NoreSources\OFM\TestData\Subspace;
 /**
  * Just to see how class names are resolved in metadata
  *
- * @persistent-entity
+ * @persistent-object
  */
 class DeeperEntity
 {

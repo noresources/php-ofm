@@ -10,9 +10,9 @@ namespace NoreSources\OFM\TestData;
 
 /**
  *
- * @persistent-entity table=Test_EntityWithEmbeddedObject; schema=Tests
+ * @persistent-object table=Test_EntityWithEmbeddedObject; schema=Tests
  * @persistent-lifecycle-callbacks pre-persist=prePersistTask
- * @persistent-entity-listener class="\\NoreSources\\OFM\\TestUtility\\TestEntityListener"
+ * @persistent-object-listener class="\\NoreSources\\Persistence\\TestUtility\\TestEntityListener"
  *
  */
 class EntityWithEmbeddedObject
@@ -30,7 +30,7 @@ class EntityWithEmbeddedObject
 	/**
 	 * Embedded product
 	 *
-	 * @persistent-field
+	 * @persistent-property
 	 * @var Product
 	 */
 	public $product;
