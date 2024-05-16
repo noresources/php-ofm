@@ -241,18 +241,17 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 
 		$ofm->persist($alice);
 		$this->assertEquals(0, $listener->invocationCount,
-			'listener not invoked before flush');
+			'listener not invoked after persist, before flush');
+
 		$ofm->flush();
-
 		$this->assertNotNull($alice->getId(), 'ID set after flush');
-
 		$this->assertEquals(0, $listener->invocationCount,
 			'Listener not invoked after first flush');
 
 		$alice->setName('Alice');
 		$ofm->persist($alice);
 		$ofm->flush();
-		$this->assertEquals(0, $listener->invocationCount,
+		$this->assertEquals(1, $listener->invocationCount,
 			'Listener invoked after second flush');
 	}
 

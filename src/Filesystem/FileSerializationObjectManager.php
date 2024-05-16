@@ -16,7 +16,6 @@ use NoreSources\OFM\Filesystem\Traits\DirectoryMapperAwareTrait;
 use NoreSources\OFM\Filesystem\Traits\FilenameStrategyTrait;
 use NoreSources\OFM\Filesystem\Traits\SerializationStrategyTrait;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
-use NoreSources\Persistence\Event\EventManagerAwareInterface;
 use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Event\ListenerInvokerProviderInterface;
 use NoreSources\Persistence\Traits\ObjectManagerTrait;
@@ -26,7 +25,7 @@ use NoreSources\Type\TypeDescription;
  * ObjectManager implementation using FileSerializationObjectRepository
  */
 class FileSerializationObjectManager implements ObjectManager,
-	EventManagerAwareInterface, ListenerInvokerProviderInterface
+	ListenerInvokerProviderInterface
 {
 	use ObjectManagerTrait;
 	use DirectoryMapperAwareTrait;
@@ -44,7 +43,13 @@ class FileSerializationObjectManager implements ObjectManager,
 	 */
 	public function configure(Configuration $configuration)
 	{
-		$this->setEventManager($configuration->getEventManager());
+		$evm = $configuration->getEventManager();
+		if ($evm)
+		{
+			$invoker = new ListenerInvoker($evm);
+			$this->setListenerInvoker($invoker);
+		}
+
 		$this->setMetadataFactory($configuration->getMetadataFactory());
 
 		$this->setBasePath($configuration->getBasePath());
@@ -61,23 +66,15 @@ class FileSerializationObjectManager implements ObjectManager,
 
 	/**
 	 *
-	 * @return EventManager
+	 * @return EventManager|NULL
 	 */
 	public function getEventManager()
 	{
-		if (!isset($this->eventManager))
-			$this->eventManager = new EventManager();
-		return $this->eventManager;
-	}
+		$invoker = $this->getListenerInvoker();
+		if ($invoker)
+			return $invoker->getEventManager();
 
-	/**
-	 *
-	 * {@inheritdoc}
-	 * @see \NoreSources\OFM\Event\EventManagerAwareInterface::setEventManager()
-	 */
-	public function setEventManager(EventManager $evm)
-	{
-		$this->eventManager = $evm;
+		return null;
 	}
 
 	/**
@@ -194,8 +191,8 @@ class FileSerializationObjectManager implements ObjectManager,
 				'General base path is mandatory to use non-absolute path from ' .
 				TypeDescription::getName($dm));
 
-		return $this->basePath . '/' . $dm->getClassDirectory(
-			$className);
+		return $this->basePath . '/' .
+			$dm->getClassDirectory($className);
 	}
 
 	/**
@@ -216,12 +213,6 @@ class FileSerializationObjectManager implements ObjectManager,
 
 		return $repository;
 	}
-
-	/**
-	 *
-	 * @var EventManager
-	 */
-	private $eventManager;
 
 	/**
 	 *
