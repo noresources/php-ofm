@@ -13,6 +13,7 @@ use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Mapping\ClassMetadataReflectionPropertyMapper;
 use NoreSources\Reflection\ReflectionServiceInterface;
 use NoreSources\Type\TypeConversion;
+use NoreSources\Data\Primitifier;
 
 /**
  * Extension of the ClassMetadataReflectionPropertyMapper that handle object associations and
@@ -89,10 +90,9 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 	{
 		if (!(\is_object($value) && \is_a($value, $type)))
 			return $value;
-		$rs = $this->getReflectionService();
-		$flags = ReflectionServiceInterface::READABLE |
-			ReflectionServiceInterface::EXPOSE_HIDDEN_PROPERTY;
-		return $rs->getPropertyValues($value, $flags);
+
+		$primitifier = $this->getPrimitifier();
+		return $primitifier($value);
 	}
 
 	/**
@@ -138,4 +138,21 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 		}
 		return $instance;
 	}
+
+	/**
+	 *
+	 * @return \NoreSources\Data\Primitifier
+	 */
+	public function getPrimitifier()
+	{
+		if (!isset($this->primitifier))
+			$this->primitifier = new Primitifier();
+		return $this->primitifier;
+	}
+
+	/**
+	 *
+	 * @var Primitifier
+	 */
+	private $primitifier;
 }
