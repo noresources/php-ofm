@@ -42,7 +42,7 @@ class Bug
 	/**
 	 *
 	 * @persistent-many-to-one inversed-by=assignedBugs
-	 * @var User
+	 * @var User|NULL
 	 */
 	protected $engineer;
 
@@ -50,7 +50,7 @@ class Bug
 	 *
 	 * @ManyToOne(targetEntity="User", inversedBy="reportedBugs")
 	 * @persistent-many-to-one inversed-by=reportedBugs
-	 * @var User
+	 * @var User|NULL
 	 */
 	protected $reporter;
 

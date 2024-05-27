@@ -363,7 +363,7 @@ abstract class AbstractFilesystemObjectRepository implements
 			unset($this->originalObjectCache[$oid]);
 	}
 
-	public function detachAll()
+	public function clear()
 	{
 		$this->identityMappings = [];
 		$this->objectCache = [];

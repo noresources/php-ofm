@@ -9,25 +9,29 @@
 namespace NoreSources\OFM\Filesystem;
 
 use Doctrine\Common\EventManager;
-use Doctrine\Persistence\ObjectManager;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\Selectable;
+use Doctrine\Common\Collections\Expr\Comparison;
 use Doctrine\Persistence\ObjectRepository;
+use Doctrine\Persistence\Mapping\ClassMetadata;
+use NoreSources\Container\Container;
 use NoreSources\OFM\Configuration;
 use NoreSources\OFM\Filesystem\Traits\DirectoryMapperAwareTrait;
 use NoreSources\OFM\Filesystem\Traits\FilenameStrategyTrait;
 use NoreSources\OFM\Filesystem\Traits\SerializationStrategyTrait;
+use NoreSources\Persistence\AbstractObjectManager;
 use NoreSources\Persistence\ObjectManagerAwareInterface;
+use NoreSources\Persistence\UnitOfWork;
 use NoreSources\Persistence\Event\ListenerInvoker;
 use NoreSources\Persistence\Event\ListenerInvokerProviderInterface;
-use NoreSources\Persistence\Traits\ObjectManagerTrait;
 use NoreSources\Type\TypeDescription;
 
-/**
- * ObjectManager implementation using FileSerializationObjectRepository
- */
-class FileSerializationObjectManager implements ObjectManager,
+class FileSerializationObjectManager extends AbstractObjectManager implements
 	ListenerInvokerProviderInterface
 {
-	use ObjectManagerTrait;
+
 	use DirectoryMapperAwareTrait;
 	use FilenameStrategyTrait;
 	use SerializationStrategyTrait;
@@ -127,6 +131,137 @@ class FileSerializationObjectManager implements ObjectManager,
 
 		$this->setRepository($className, $repository);
 		return $repository;
+	}
+
+	/**
+	 *
+	 * @param object $object
+	 *        	Object
+	 * @param ClassMetadata $metadata
+	 *
+	 */
+	protected function finalizePreRemove($object, $metadata)
+	{
+		$visited = [
+			\spl_object_id($object)
+		];
+		$this->doFinalizePreRemove($visited, $object, $metadata);
+	}
+
+	protected function doFinalizePreRemove(&$visited, $object, $metadata)
+	{
+		$objectId = $metadata->getIdentifierValues($object);
+		$objectId = Container::firstValue($objectId);
+		$factory = $this->getMetadataFactory();
+		$allMetadata = $factory->getAllMetadata();
+		$className = $metadata->getName();
+
+		/**
+		 *
+		 * @var \Doctrine\Persistence\Mapping\ReflectionService $reflectionService
+		 */
+		$reflectionService = $factory->getReflectionService();
+
+		foreach ($allMetadata as $otherMetadata)
+		{
+			$associations = $otherMetadata->getAssociationNames();
+			if (\count($associations) == 0)
+				continue;
+
+			$otherClassName = $otherMetadata->getName();
+
+			$managed = null;
+			if ($this->hasUnitOfWork())
+				$managed = new ArrayCollection(
+					$this->getUnitOfWork()->getObjectsBy(
+						$otherClassName,
+						[
+							UnitOfWork::OPERATION_UPDATE,
+							UnitOfWork::OPERATION_INSERT
+						]));
+
+			foreach ($associations as $fieldName)
+			{
+				if ($otherMetadata->getAssociationTargetClass(
+					$fieldName) != $className)
+					continue;
+
+				$repository = $this->getRepository(
+					$otherMetadata->getName());
+
+				$property = $reflectionService->getAccessibleProperty(
+					$otherClassName, $fieldName);
+
+				if ($otherMetadata->isSingleValuedAssociation(
+					$fieldName))
+				{
+					$list = $repository->findBy(
+						[
+							$fieldName => $object
+						]);
+					if ($managed instanceof ArrayCollection)
+					{
+						$expression = new Comparison($fieldName,
+							Comparison::EQ, $object);
+						$criteria = Criteria::create()->andWhere(
+							$expression);
+
+						$filtered = $managed->matching($criteria);
+						foreach ($filtered as $value)
+							if (!\in_array($value, $list))
+								$list[] = $value;
+					}
+
+					foreach ($list as $o)
+					{
+						$oid = \spl_object_id($o);
+						if (\in_array($oid, $visited))
+							continue;
+						$visited[] = $oid;
+
+						$property->setValue($o, null);
+						$this->persist($o);
+					}
+				}
+				elseif ($otherMetadata->isCollectionValuedAssociation(
+					$fieldName) && $repository instanceof Selectable)
+				{
+					$expression = new Comparison($fieldName,
+						Comparison::MEMBER_OF, $object);
+					$criteria = Criteria::create()->andWhere(
+						$expression);
+
+					/**
+					 *
+					 * @var Collection $list
+					 */
+					$list = $repository->matching($criteria);
+
+					if ($managed instanceof ArrayCollection)
+					{
+						$filtered = $managed->matching($criteria);
+						foreach ($filtered as $element)
+						{
+							if (!$list->contains($element))
+								$list->add($element);
+						}
+					}
+
+					foreach ($list as $o)
+					{
+						$oid = \spl_object_id($o);
+						if (\in_array($oid, $visited))
+							continue;
+						$visited[] = $oid;
+
+						$collection = $property->getValue($o);
+						$collection->removeElement($object);
+						$property->setValue($o, $collection);
+						$this->persist($o);
+					}
+				}
+			}
+		}
 	}
 
 	/**

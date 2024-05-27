@@ -6,11 +6,15 @@
 		</id>
 
 		<field name="name" type="string" />
-				<field name="persistCount" type="integer" />
-				<field name="updateCount" type="integer" />
+		<field name="persistCount" type="integer" />
+		<field name="updateCount" type="integer" />
 
 		<one-to-many target-entity="Bug" field="reportedBugs" mapped-by="reporter" />
-		<one-to-many target-entity="Bug" field="assignedBugs" mapped-by="engineer" />
+		<one-to-many target-entity="Bug" field="assignedBugs" mapped-by="engineer">
+			<cascade>
+				<cascade-remove />
+			</cascade>
+		</one-to-many>
 
 		<lifecycle-callbacks>
 			<lifecycle-callback type="prePersist" method="prePersistTask" />
