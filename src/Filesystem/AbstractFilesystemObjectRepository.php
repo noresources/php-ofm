@@ -8,6 +8,7 @@
  */
 namespace NoreSources\OFM\Filesystem;
 
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Criteria;
 use Doctrine\Common\Collections\ExpressionBuilder;
 use Doctrine\Common\Collections\Selectable;
@@ -265,7 +266,7 @@ abstract class AbstractFilesystemObjectRepository implements
 		{
 			$filtered = array_slice($filtered, (int) $offset, $limit);
 		}
-		return $filtered;
+		return new ArrayCollection(\array_values($filtered));
 	}
 
 	public function contains(object $object)
