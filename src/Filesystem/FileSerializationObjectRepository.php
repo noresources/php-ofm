@@ -123,7 +123,7 @@ class FileSerializationObjectRepository extends ReadOnlyFileSerializationObjectR
 		$indexedFieldNames = $this->getIndexedFieldNames();
 		if (\count($indexedFieldNames) == 0)
 			return;
-		$id = $this->getClassMetadata()->getIdentifierValues($o);
+		$objectId = $this->getClassMetadata()->getIdentifierValues($o);
 		$data = [];
 		$this->getPropertyMapper()->fetchObjectProperties($data, $o);
 		foreach ($indexedFieldNames as $fieldName)
