@@ -291,12 +291,28 @@ abstract class AbstractFilesystemObjectRepository implements
 		$this->originalObjectCache[$oid] = clone $object;
 	}
 
+	public function getObjectIdentity(object $object)
+	{
+		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+			$object);
+		if (!isset($this->identityMappings[$oid]))
+			return NULL;
+		$hash = $this->identityMappings[$oid];
+		$id = $hash = $this->getFilenameMapper()->getIdentifier($hash);
+		$metadata = $this->getClassMetadata();
+		$name = Container::firstValue(
+			$metadata->getIdentifierFieldNames());
+		return [
+			$name => $id
+		];
+	}
+
 	public function getObjectOriginalCopy(object $object)
 	{
 		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
-			return;
+			return NULL;
 		if (!isset($this->originalObjectCache[$oid]))
 			return NULL;
 		return $this->originalObjectCache[$oid];
