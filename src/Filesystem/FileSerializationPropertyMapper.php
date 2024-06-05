@@ -8,12 +8,12 @@
  */
 namespace NoreSources\OFM\Filesystem;
 
+use Doctrine\Persistence\ObjectManager;
 use NoreSources\Container\Container;
+use NoreSources\Data\Primitifier;
 use NoreSources\Persistence\Mapping\ClassMetadataAdapter;
 use NoreSources\Persistence\Mapping\ClassMetadataReflectionPropertyMapper;
-use NoreSources\Reflection\ReflectionServiceInterface;
 use NoreSources\Type\TypeConversion;
-use NoreSources\Data\Primitifier;
 
 /**
  * Extension of the ClassMetadataReflectionPropertyMapper that handle object associations and
@@ -42,7 +42,8 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 			$fieldName);
 		$objectManager = $this->getObjectManager();
 		if (!$objectManager)
-			return $value;
+			throw new \RuntimeException(
+				ObjectManager::class . ' is not set.');
 		if (!($associationClassName &&
 			($associationClassName = ClassMetadataAdapter::getFullyQualifiedClassName(
 				$associationClassName, $metadata))))
