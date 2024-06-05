@@ -119,6 +119,7 @@ class FileSerializationObjectManager implements ObjectManager,
 		if (!isset($this->basePath))
 			throw new \RuntimeException(
 				'No base path defined for automatic creation of ObjectRepository');
+
 		$repository = $this->createObjectRepository($className);
 
 		if ($repository instanceof ObjectManagerAwareInterface)
@@ -146,14 +147,7 @@ class FileSerializationObjectManager implements ObjectManager,
 		if ($this->hasPersister($className))
 			return $this->defaultGetPersister($className);
 
-		if ($this->hasRepository($className))
-			$repository = $this->defaultGetRepository($className);
-		else
-		{
-			$repository = $this->createObjectRepository($className);
-			$this->setRepository($className, $repository);
-		}
-
+		$repository = $this->getRepository($className);
 		$this->setPersister($className, $repository);
 		return $repository;
 	}
@@ -191,8 +185,8 @@ class FileSerializationObjectManager implements ObjectManager,
 				'General base path is mandatory to use non-absolute path from ' .
 				TypeDescription::getName($dm));
 
-		return $this->basePath . '/' .
-			$dm->getClassDirectory($className);
+		return $this->basePath . '/' . $dm->getClassDirectory(
+			$className);
 	}
 
 	/**
