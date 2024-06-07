@@ -89,8 +89,8 @@ abstract class AbstractFilesystemObjectRepository implements
 		if (!\file_exists($filename))
 			return null;
 
-		$flags = self::FETCH_USE_CACHED | self::FETCH_CACHE_OBJECT;
-		return $this->fetchObjectFromFile($filename, $flags);
+		return $this->fetchObjectFromFile($filename,
+			self::FETCH_CACHE_OBJECT);
 	}
 
 	/**
@@ -125,10 +125,13 @@ abstract class AbstractFilesystemObjectRepository implements
 					return [];
 				$ids = $index->get($indexValue);
 				foreach ($ids as $id)
-					$files[] = $this->getObjectIdentifierFile($id);
+				{
+					$hash = $this->getFilenameMapper()->getBasename($id);
+					if (Container::keyExists($list, $hash))
+						continue;
+					$files[$hash] = $this->getObjectIdentifierFile($id);
+				}
 			}
-
-			$files = \array_unique($files);
 		}
 		else
 			$files = $this->getObjectFiles();
@@ -155,11 +158,13 @@ abstract class AbstractFilesystemObjectRepository implements
 			{
 				$offset = \is_integer($offset) ? $offset : 0;
 				$limit = (\is_integer($limit) && $limit > 0) ? $limit : -1;
-				$flags = self::FETCH_USE_CACHED;
-				foreach ($files as $key => $filename)
+				foreach ($files as $hash => $filename)
 				{
-					$object = $this->fetchObjectFromFile($filename,
-						$flags);
+					if (isset($this->objectCache[$hash]))
+						$object = $this->objectCache[$hash];
+					else
+						$object = $this->fetchObjectFromFile($filename,
+							self::FETCH_CACHE_OBJECT);
 
 					if (!$filter($object))
 						continue;
@@ -190,12 +195,16 @@ abstract class AbstractFilesystemObjectRepository implements
 			if ($offset || $limit)
 				$files = \array_slice($files, $offset, $limit);
 
-			return \array_values(
-				\array_map(
-					function ($filename) {
-						return $this->fetchObjectFromFile($filename,
-							self::FETCH_USE_CACHED);
-					}, $files));
+			$list = [];
+			foreach ($files as $hash => $filename)
+			{
+				if (isset($this->objectCache[$hash]))
+					$list[] = $this->objectCache[$hash];
+				else
+					$list[] = $this->fetchObjectFromFile($filename,
+						self::FETCH_CACHE_OBJECT);
+			}
+			return $list;
 		} // Natural sort
 
 		$list = $this->findAll();
@@ -227,9 +236,15 @@ abstract class AbstractFilesystemObjectRepository implements
 		$files = $this->getObjectFiles();
 		\ksort($files);
 		$list = [];
-		$flags = self::FETCH_USE_CACHED | self::FETCH_CACHE_OBJECT;
-		foreach ($files as $filename)
-			$list[] = $this->fetchObjectFromFile($filename, $flags);
+		foreach ($files as $hash => $filename)
+		{
+			if (isset($this->objectCache[$hash]))
+				$list[] = $this->objectCache[$hash];
+			else
+				$list[] = $this->fetchObjectFromFile($filename,
+					self::FETCH_CACHE_OBJECT);
+		}
+
 		return $list;
 	}
 
@@ -328,7 +343,7 @@ abstract class AbstractFilesystemObjectRepository implements
 		$this->originalObjectCache[$oid] = $original;
 	}
 
-	private function getObjectOID($object)
+	protected function getObjectOID($object)
 	{
 		return $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
@@ -561,11 +576,9 @@ abstract class AbstractFilesystemObjectRepository implements
 		$idFields = $metadata->getIdentifierFieldNames();
 		$mediaType = $this->getFileMediaType();
 
-		foreach ($files as $filename)
+		foreach ($files as $hash => $filename)
 		{
-			$flags = 0;
-			$object = $this->fetchObjectFromFile($filename, $flags);
-
+			$object = $this->fetchObjectFromFile($filename, 0);
 			$objectId = $metadata->getIdentifierValues($object);
 
 			$data = [];
@@ -652,9 +665,34 @@ abstract class AbstractFilesystemObjectRepository implements
 		$metadata = $this->getClassMetadata();
 		$id = ObjectIdentifier::normalize($object, $metadata);
 		$hash = $this->getFilenameMapper()->getBasename($id);
-		$this->identityMappings[$oid] = $hash;
 
+		if (isset($this->identityMappings[$oid]))
+		{
+			if ($this->identityMappings[$oid] !== $hash)
+			{
+				throw new \RuntimeException(
+					$metadata->getName() . ' ' . $hash . ' #' . $oid .
+					' is already cached with ID ' .
+					$this->identityMappings[$oid]);
+			}
+		}
+
+		if (isset($this->objectCache[$hash]))
+		{
+			if ($this->objectCache[$hash] !== $object)
+			{
+				$ooid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
+					$this->objectCache[$hash]);
+				throw new \RuntimeException(
+					$metadata->getName() . ' ' . $hash . ' #' . $oid .
+					' is already cached with a different object #' .
+					$ooid);
+			}
+		}
+
+		$this->identityMappings[$oid] = $hash;
 		$this->objectCache[$hash] = $object;
+
 		$this->originalObjectCache[$oid] = clone $object;
 	}
 

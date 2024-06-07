@@ -9,6 +9,8 @@
 namespace NoreSources\OFM\TestCase\Filesystem;
 
 use Doctrine\Common\EventManager;
+use Doctrine\Common\Collections\Criteria;
+use Doctrine\Common\Collections\Expr\Comparison;
 use Doctrine\ORM\ORMSetup;
 use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\Persistence\ObjectManager;
@@ -722,6 +724,264 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			$prefix . 'Bug products are Product');
 		$this->assertEquals($productId, $firstBugProduct->getId(),
 			$prefix . 'Bug product ID');
+	}
+
+	public function testFindByCollectionAssociation()
+	{
+		$method = __METHOD__;
+		$ofm = $this->createFileObjectManagerForTest($method);
+
+		$product = new Product();
+		$product->setName('Product');
+		$fork = new Product();
+		$fork->setName('Fork of product');
+
+		$bug = new Bug();
+		$bug->assignToProduct($product);
+		$bug->assignToProduct($fork);
+
+		$forkBug = new Bug();
+		$forkBug->setDescription('Fork is bad');
+		$forkBug->assignToProduct($fork);
+
+		$this->assertCount(2, $bug->getProducts(), 'Bug products');
+
+		$ofm->persist($product);
+		$ofm->persist($fork);
+		$ofm->persist($bug);
+		$ofm->persist($forkBug);
+		$ofm->flush();
+		$productId = $product->getId();
+		$bugId = $bug->getId();
+
+		$ofm = $this->createFileObjectManagerForTest($method);
+
+		$product = $ofm->find(Product::class, $productId);
+		$this->assertNotNull($product, 'Find product');
+
+		$bugRepository = $ofm->getRepository(Bug::class);
+		$criteria = Criteria::create();
+		$expression = new Comparison('products', Comparison::MEMBER_OF,
+			$product);
+		$criteria->andWhere($expression);
+		$matching = $bugRepository->matching($criteria);
+		$this->assertCount(1, $matching, 'Matching bugs');
+		$bug = Container::firstValue($matching);
+		$found = 0;
+		foreach ($bug->getProducts() as $p)
+		{
+			if ($p === $product)
+				$found++;
+		}
+		$this->assertEquals(1, $found,
+			'Found reference of product in bug products');
+	}
+
+	public function testCascadeRemove()
+	{
+		$method = __METHOD__;
+		$isDevMode = true;
+		$ofm = $this->createFileObjectManagerForTest($method);
+		$em = $this->createEntityManagerForTest($method,
+			[
+				Product::class,
+				Bug::class,
+				User::class
+			], $isDevMode);
+
+		$objectManagers = [
+			TypeDescription::getLocalName($em) => $em,
+			TypeDescription::getLocalName($ofm) => $ofm
+		];
+
+		$p1 = new Product();
+		$p1->setName('Product 1');
+		$p2 = new Product();
+		$p2->setName('Product 2');
+		$reporter = new User();
+		$reporter->setName('Reporter');
+		$engineer = new User();
+		$engineer->setName('Engineer');
+
+		$bug = new Bug();
+		$bug->setCreated(new \DateTime('now'));
+		$bug->setDescription('Not working');
+		$bug->setEngineer($engineer);
+		$bug->setReporter($reporter);
+		$bug->assignToProduct($p1);
+		$bug->assignToProduct($p2);
+
+		$objects = [
+			'p1' => $p1,
+			'reporter' => $reporter,
+			'bug' => $bug,
+			'engineer' => $engineer,
+			'p2' => $p2
+		];
+
+		$managed = [];
+
+		foreach ($objectManagers as $key => $manager)
+		{
+			$managed[$key] = [];
+			foreach ($objects as $object)
+				$manager->persist($object);
+			$manager->flush();
+			foreach ($objects as $name => $object)
+			{
+				$manager->refresh($object);
+				$managed[$key][$name] = [
+					'id' => $object->getId(),
+					'object' => $object
+				];
+			}
+		}
+
+		$manager = $ofm;
+		$k = TypeDescription::getLocalName($ofm);
+		#foreach ($objectManagers as $k => $manager)
+		{
+			$objects = $managed[$k];
+			$bugId = $objects['bug']['id'];
+			$engineerId = $objects['engineer']['id'];
+			/**
+			 *
+			 * @var Bug $bug
+			 */
+			$bug = $manager->find(Bug::class, $bugId);
+			$manager->refresh($bug);
+
+			$this->assertNotNull($bug->getEngineer(),
+				'Engineer is set before remove in ' . $k);
+
+			$engineer = $manager->find(User::class, $engineerId);
+			$this->assertNotNull($engineer,
+				$k . ' engineer exists in manager before remove.');
+
+			$manager->remove($engineer);
+			$manager->flush();
+
+			$engineer = $manager->find(User::class, $engineerId);
+			$this->assertNull($engineer, $k . ' engineer removed');
+
+			$this->assertNull($bug->getEngineer(),
+				$k . ' Bug engineer set to NULL after flush');
+
+			$manager->clear();
+
+			$bug = $manager->find(Bug::class, $bugId);
+			$this->assertNull($bug->getEngineer(),
+				$k . ' Bug engineer set to NULL after refresh');
+		}
+
+		/**
+		 *
+		 * @var FileSerializationObjectRepository $repository
+		 */
+		$repository = $ofm->getRepository(Bug::class);
+		$filename = $repository->getObjectFile($bug);
+		$data = \json_decode(\file_get_contents($filename));
+		$this->assertNull($data->engineer,
+			'JSON.engineer is set to NULL');
+	}
+
+	public function testRemoveInSameClass()
+	{
+		$method = __METHOD__;
+		/**
+		 *
+		 * @var FileSerializationObjectManager $ofm
+		 */
+		$ofm = $this->createFileObjectManagerForTest($method);
+
+		$metadata = $ofm->getClassMetadata(Relationship::class);
+		$this->assertTrue(
+			$metadata->isSingleValuedAssociation('secondUser'),
+			Relationship::class .
+			'::secondUser is a single value association');
+
+		$alice = new User();
+		$alice->setName('Alice');
+		$bob = new User();
+		$bob->setName('Bob');
+		$eve = new User();
+		$eve->setName('Eve');
+		$charlie = new User();
+		$charlie->setName('Charlie');
+
+		$users = [
+			$alice,
+			$bob,
+			$eve,
+			$charlie
+		];
+
+		foreach ($users as $user)
+			$ofm->persist($user);
+
+		$ofm->flush();
+		$aliceId = $alice->getId();
+
+		$id = 0;
+
+		$relations = [];
+		$relations[] = new Relationship($id++, $alice, $bob, 'teammate');
+		$relations[] = new Relationship($id++, $eve, $alice, 'hack');
+		$relations[] = new Relationship($id++, $eve, $bob, 'hack');
+		$relations[] = new Relationship($id++, $charlie, $alice, 'lead');
+		$relations[] = new Relationship($id++, $charlie, $eve, 'lead');
+
+		foreach ($relations as $relation)
+			$ofm->persist($relation);
+		$ofm->flush();
+
+		/**
+		 *
+		 * @var Relationship $evehackAlice
+		 */
+		$evehackAlice = $relations[1];
+		$this->assertEquals($alice, $evehackAlice->secondUser,
+			'Alice is referenced in Eve <-> Alice relation (1)');
+		$this->assertEquals('hack', $evehackAlice->relationType,
+			'Eve <-> Alice relation type (1)');
+
+		$evehackAlice = $ofm->find(Relationship::class, 1);
+		$this->assertNotNull($evehackAlice,
+			'Eve <-> Alice relation from object manager');
+
+		$this->assertEquals($alice, $evehackAlice->secondUser,
+			'Alice is referenced in Eve <-> Alice relation (2)');
+		$this->assertEquals('hack', $evehackAlice->relationType,
+			'Eve <-> Alice relation type (2)');
+
+		foreach ($relations as $relation)
+			$ofm->persist($relation);
+		$ofm->flush();
+
+		$ofm = $this->createFileObjectManagerForTest($method);
+
+		$userRepository = $ofm->getRepository(User::class);
+		$relationRepository = $ofm->getRepository(Relationship::class);
+
+		$alice = $ofm->find(User::class, $aliceId);
+		$this->assertNotNull($alice, 'Alice');
+
+		/**
+		 *
+		 * @var Relationship $evehackAlice
+		 */
+		$evehackAlice = $ofm->find(Relationship::class, 1);
+		$this->assertNotNull($evehackAlice,
+			'Eve <-> Alice relation found in repository');
+
+		$this->assertEquals($alice, $evehackAlice->secondUser,
+			'Alice is referenced in Eve <-> Alice relation (before removing)');
+
+		$ofm->remove($alice);
+		$ofm->flush();
+
+		$this->assertNull($evehackAlice->secondUser,
+			'Alice is removed in Eve <-> Alice relation ');
 	}
 
 	/**

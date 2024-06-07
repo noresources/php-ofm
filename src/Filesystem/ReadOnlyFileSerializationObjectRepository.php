@@ -170,8 +170,7 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 
 		foreach ($files as $filename)
 		{
-			$flags = 0;
-			$object = $this->fetchObjectFromFile($filename, $flags);
+			$object = $this->fetchObjectFromFile($filename, 0);
 
 			$objectId = $metadata->getIdentifierValues($object);
 
