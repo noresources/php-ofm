@@ -66,17 +66,18 @@ class FileSerializationPropertyMapper extends ClassMetadataReflectionPropertyMap
 		}
 
 		$ids = [];
-		foreach ($value as $o)
-		{
-			$id = $o;
-			if (\is_object($o) && \is_a($o, $associationClassName))
+		if (Container::isTraversable($value))
+			foreach ($value as $o)
 			{
-				$id = $associationMetadata->getIdentifierValues($o);
-				if (Container::count($id) == 1)
-					$id = Container::firstValue($id);
+				$id = $o;
+				if (\is_object($o) && \is_a($o, $associationClassName))
+				{
+					$id = $associationMetadata->getIdentifierValues($o);
+					if (Container::count($id) == 1)
+						$id = Container::firstValue($id);
+				}
+				$ids[] = $id;
 			}
-			$ids[] = $id;
-		}
 
 		return $ids;
 	}

@@ -68,7 +68,7 @@ abstract class AbstractFilesystemObjectRepository implements
 		$this->classMetadata = $classMetadata;
 		$this->setFilesystemStrategy($basePath, $filenameMapper,
 			$extension);
-		$this->objectRuntimeIndentifierGenerator = new DefaultObjectRuntimeIdGenerator();
+		$this->objectRuntimeIdentifierGenerator = new DefaultObjectRuntimeIdGenerator();
 	}
 
 	/**
@@ -271,14 +271,14 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	public function contains(object $object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		return isset($this->identityMappings[$oid]);
 	}
 
 	public function attach(object $object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (isset($this->identityMappings[$oid]))
 			return;
@@ -293,12 +293,12 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	public function getObjectIdentity(object $object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
 			return NULL;
 		$hash = $this->identityMappings[$oid];
-		$id = $hash = $this->getFilenameMapper()->getIdentifier($hash);
+		$id = $this->getFilenameMapper()->getIdentifier($hash);
 		$metadata = $this->getClassMetadata();
 		$name = Container::firstValue(
 			$metadata->getIdentifierFieldNames());
@@ -309,7 +309,7 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	public function getObjectOriginalCopy(object $object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
 			return NULL;
@@ -321,7 +321,7 @@ abstract class AbstractFilesystemObjectRepository implements
 	public function setObjectOriginalCopy(object $object,
 		object $original)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
 			throw new NotManagedException($object);
@@ -330,13 +330,13 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	private function getObjectOID($object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		return $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 	}
 
 	public function detach($object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
 			throw new NotManagedException($object);
@@ -647,7 +647,7 @@ abstract class AbstractFilesystemObjectRepository implements
 
 	public function cacheObject($object)
 	{
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		$metadata = $this->getClassMetadata();
 		$id = ObjectIdentifier::normalize($object, $metadata);
@@ -662,7 +662,7 @@ abstract class AbstractFilesystemObjectRepository implements
 	{
 		if (!\is_object($object))
 			throw new \InvalidArgumentException();
-		$oid = $this->objectRuntimeIndentifierGenerator->getObjectRuntimeIdentifier(
+		$oid = $this->objectRuntimeIdentifierGenerator->getObjectRuntimeIdentifier(
 			$object);
 		if (!isset($this->identityMappings[$oid]))
 			return;
@@ -755,7 +755,7 @@ abstract class AbstractFilesystemObjectRepository implements
 	 *
 	 * @var ObjectRuntimeIdGeneratorInterface
 	 */
-	private $objectRuntimeIndentifierGenerator;
+	private $objectRuntimeIdentifierGenerator;
 
 	/**
 	 *

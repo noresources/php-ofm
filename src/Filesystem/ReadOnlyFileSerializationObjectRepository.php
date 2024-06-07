@@ -104,7 +104,7 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 		$data = $this->getSerializationManager()->unserializeFromFile(
 			$filename, $this->mediaType);
 
-		if (($flags & self::FETCH_USE_CACHED) & self::FETCH_USE_CACHED)
+		if (($flags & self::FETCH_USE_CACHED) == self::FETCH_USE_CACHED)
 		{
 			$object = $this->getCachedObject($data);
 			if ($object)
@@ -114,7 +114,7 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 		$object = $this->getInstantiator()->instantiate(
 			$this->getClassName());
 
-		if (($flags & self::FETCH_CACHE_OBJECT) &
+		if (($flags & self::FETCH_CACHE_OBJECT) ==
 			self::FETCH_CACHE_OBJECT)
 		{
 			$metadata = $this->getClassMetadata();
