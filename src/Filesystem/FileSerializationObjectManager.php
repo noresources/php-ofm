@@ -140,7 +140,7 @@ class FileSerializationObjectManager extends AbstractObjectManager implements
 	 * @param ClassMetadata $metadata
 	 *
 	 */
-	protected function finalizePreRemove($object, $metadata)
+	protected function preRemoveTask($object, $metadata)
 	{
 		$visited = [
 			\spl_object_id($object)
