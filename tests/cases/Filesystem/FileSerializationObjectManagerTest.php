@@ -986,6 +986,18 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			'Alice is removed in Eve <-> Alice relation ');
 	}
 
+	private function behaviorTestLabel($manager, $steps = [],
+		$message = '')
+	{
+		if (\is_object($manager))
+			$manager = TypeDescription::getLocalName($manager);
+		$steps = Container::implodeValues($steps, PHP_EOL . ' - ');
+		$label = $steps . PHP_EOL . $manager;
+		if (!empty($message))
+			$label .= PHP_EOL . $message;
+		return $label;
+	}
+
 	/**
 	 * Check if our ObjectManager reacts the same way as Doctrine ORM EntityManager
 	 */
@@ -1013,6 +1025,7 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 
 		$this->runContainsComparison($em, $ofm, $product,
 			'Initial state');
+
 		$this->assertNull($product->getId(),
 			'Product ID is initially null');
 
@@ -1139,39 +1152,69 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			]
 		] as $test)
 		{
+			/**
+			 *
+			 * @var ObjectManager $manager
+			 */
 			$manager = $test[0];
 			$managerName = TypeDescription::getLocalName($manager);
 			$object = $test[1];
 			$object->setName($badName);
 			$id = $test[2];
 
-			$this->assertTrue($manager->contains($object),
-				$managerName . '::contains() before refresh()');
+			$steps = [
+				'Initial state'
+			];
+
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product is contained');
+			$this->assertTrue($manager->contains($object), $label);
+
+			$o = $manager->find($className, $id);
+			$steps[] = 'Find by ID';
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product found');
+			$this->assertNotNull($o, $label);
+
+			$expected = \spl_object_id($object);
+			$actual = \spl_object_id($o);
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Object found is the same as the original one.');
+			$this->assertEquals($expected, $actual, $label);
 
 			$manager->refresh($object);
 
-			$this->assertTrue($manager->contains($object),
-				$managerName . '::contains() after refresh()');
+			$steps[] = 'refresh';
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product is still managed after refresh');
+			$this->assertTrue($manager->contains($object), $label);
 
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product name');
 			$this->assertEquals($modifiedName, $object->getName(),
-				$managerName . '::refresh() has restored $name');
+				$label);
 
 			$manager->detach($object);
-			$this->assertFalse($manager->contains($object),
-				$managerName . '::contains() after detach()');
+			$steps[] = 'detach';
+
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product is considered as not managed');
+			$this->assertFalse($manager->contains($object), $label);
 
 			$o = $manager->find($className, $id);
-			$this->assertNotNull($o,
-				$managerName . ' object ' . $id .
-				' is still foundable after detach');
+			$steps[] = 'Find by ID';
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Product found');
+			$this->assertNotNull($o, $label);
 
 			$h1 = \spl_object_hash($object);
 			$h2 = \spl_object_hash($o);
-			$this->assertNotEmpty($a, $b,
-				$managerName .
-				' Finding a detached object must return a different object');
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Object found is not the same rerence as the original one');
+			$this->assertNotEquals($h1, $h2, $label);
 
 			$exception = null;
+			$steps[] = 'remove';
 			try
 			{
 				$manager->remove($object);
@@ -1180,25 +1223,42 @@ class FileSerializationObjectManagerTest extends \PHPUnit\Framework\TestCase
 			{
 				$exception = $e;
 			}
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Cannot remove a detached object');
 			$this->assertInstanceOf(\Exception::class, $exception,
-				$managerName . ' cannot remove a detached object.');
+				$label);
 
 			$object = $o;
-			$this->assertTrue($manager->contains($object),
-				$managerName .
-				'::contains() after persist() (before remove)');
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Object found by find() is contained');
+			$this->assertTrue($manager->contains($object), $label);
 
 			$manager->remove($object);
+			$steps[] = 'remove';
 
-			$this->assertFalse($manager->contains($object),
-				$managerName . '::contains() after remove()');
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Object is detached after remove');
+			$this->assertFalse($manager->contains($object), $label);
+
+			if (false)
+			{
+				// Finding a removed object
+				// Re-add it to manager
+				$o = $manager->find($className, $id);
+				$steps[] = 'find by ID';
+				$label = $this->behaviorTestLabel($manager, $steps,
+					'Object can still be found after remove but before flush');
+				$this->assertNotNull($o, $label);
+			}
 
 			$manager->flush();
+			$steps[] = 'flush';
 
 			$o = $manager->find($className, $id);
-			$this->assertNull($o,
-				$managerName . ' object ' . $id .
-				' is removed after flush');
+			$steps[] = 'find by ID';
+			$label = $this->behaviorTestLabel($manager, $steps,
+				'Cound not find object anymore after flush');
+			$this->assertNull($o, $label);
 		}
 	}
 
