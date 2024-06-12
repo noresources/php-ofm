@@ -106,9 +106,14 @@ class ReadOnlyFileSerializationObjectRepository extends AbstractFilesystemObject
 
 		if (($flags & self::FETCH_USE_CACHED) == self::FETCH_USE_CACHED)
 		{
-			$object = $this->getCachedObject($data);
-			if ($object)
-				return $object;
+			try
+			{
+				$object = $this->getCachedObject($data);
+				if ($object)
+					return $object;
+			}
+			catch (\Exception $e)
+			{}
 		}
 
 		$object = $this->getInstantiator()->instantiate(

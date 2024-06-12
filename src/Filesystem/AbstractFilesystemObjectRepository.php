@@ -78,6 +78,9 @@ abstract class AbstractFilesystemObjectRepository implements
 	 */
 	public function find($id)
 	{
+		if (!\is_dir($this->basePath))
+			return NULL;
+
 		$metadata = $this->getClassMetadata();
 		$id = ObjectIdentifier::normalize($id, $metadata);
 
@@ -86,6 +89,10 @@ abstract class AbstractFilesystemObjectRepository implements
 			return $object;
 
 		$filename = $this->getObjectIdentifierFile($id);
+		if (!\is_string($filename))
+			throw new \RuntimeException(
+				'Could not determine filename for objet ID ' .
+				var_export($id, true));
 		if (!\file_exists($filename))
 			return null;
 
@@ -102,6 +109,8 @@ abstract class AbstractFilesystemObjectRepository implements
 		$limit = null, $offset = null)
 	{
 		if ($limit === 0)
+			return [];
+		if (!\is_dir($this->basePath))
 			return [];
 
 		$indexedFieldNames = $this->getIndexedFieldNames();
