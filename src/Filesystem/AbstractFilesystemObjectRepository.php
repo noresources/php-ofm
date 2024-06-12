@@ -86,6 +86,8 @@ abstract class AbstractFilesystemObjectRepository implements
 			return $object;
 
 		$filename = $this->getObjectIdentifierFile($id);
+		if (!\is_string($filename))
+			throw new \RuntimeException ('Could not determine filename for objet ID ' . var_export($id, true));
 		if (!\file_exists($filename))
 			return null;
 
