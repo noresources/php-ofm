@@ -23,6 +23,7 @@
 		}
 	}, 
 	"require": {
+		"noresources/ns-php-data": "^2.2",
 		"noresources/persistence": "^0.15 || ^1.0"
 	}, 
 	"scripts": {
