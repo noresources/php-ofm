@@ -24,7 +24,7 @@
 	}, 
 	"require": {
 		"noresources/ns-php-data": "^2.2",
-		"noresources/persistence": "^0.15 || ^1.0"
+		"noresources/persistence": "^0.15"
 	}, 
 	"scripts": {
 		"test": "@php  ./vendor/bin/phpunit --color=never --bootstrap vendor/autoload.php tests/cases"
